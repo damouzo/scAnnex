@@ -1,0 +1,73 @@
+# Nextflow
+.nextflow*
+work/
+results/
+*.html
+*.svg
+timeline*.html
+report*.html
+trace*.txt
+dag*.html
+.nextflow.log*
+
+# Test data and results
+test_data/analytical_core_results/
+test_data/nextflow_test_results/
+test_data/test_output/
+test_data/*.h5ad
+test_data/*.rds
+test_data/*.log
+
+# Large data files
+*.h5ad
+*.h5
+*.rds
+*.loom
+*.h5seurat
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+
+# R
+.Rhistory
+.RData
+.Rproj.user
+*.Rproj
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# OS
+Thumbs.db
+.DS_Store

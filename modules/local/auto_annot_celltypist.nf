@@ -1,15 +1,14 @@
-process DIMENSIONALITY_REDUCTION {
+process AUTO_ANNOT_CELLTYPIST {
     tag "$meta.id"
-    label 'process_high'
+    label 'process_medium'
 
-    container "community.wave.seqera.io/library/scanpy_leidenalg:latest"
+    container "quay.io/biocontainers/celltypist:1.6.2--pyhdfd78af_0"
 
     input:
     tuple val(meta), path(h5ad)
 
     output:
-    tuple val(meta), path("*_processed.h5ad"), emit: h5ad
-    path "*.{png,pdf}"                        , emit: plots
+    tuple val(meta), path("*_celltypist.csv"), emit: annotations
     path "versions.yml"                       , emit: versions
 
     when:
@@ -19,24 +18,24 @@ process DIMENSIONALITY_REDUCTION {
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    dimensionality_reduction.py \\
+    auto_annot_celltypist.py \\
         --input ${h5ad} \\
-        --output ${prefix}_processed.h5ad \\
+        --output ${prefix}_celltypist.csv \\
         ${args}
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
+        python: \$(python --version | sed 's/Python //g')
+        celltypist: \$(python -c "import celltypist; print(celltypist.__version__)")
         scanpy: \$(python -c "import scanpy; print(scanpy.__version__)")
-        leidenalg: \$(python -c "import leidenalg; print(leidenalg.__version__)")
     END_VERSIONS
     """
 
     stub:
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    touch ${prefix}_processed.h5ad
-    touch pca_variance.png
-    touch umap_clusters.png
+    echo "cell_id,label,score,tool" > ${prefix}_celltypist.csv
+    echo "cell1,T cells,0.95,celltypist" >> ${prefix}_celltypist.csv
     touch versions.yml
     """
 }
