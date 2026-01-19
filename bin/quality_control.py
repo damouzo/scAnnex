@@ -540,6 +540,40 @@ def apply_qc_filters(
     return adata, filtering_stats
 
 
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder for numpy types."""
+    def default(self, o):
+        import numpy as np
+        if isinstance(o, np.integer):
+            return int(o)
+        elif isinstance(o, np.floating):
+            return float(o)
+        elif isinstance(o, np.ndarray):
+            return o.tolist()
+        elif isinstance(o, np.bool_):
+            return bool(o)
+        return super(NumpyEncoder, self).default(o)
+
+
+def convert_to_serializable(obj):
+    """Convert numpy types to Python native types for JSON serialization."""
+    import numpy as np
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_to_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_serializable(item) for item in obj]
+    else:
+        return obj
+
+
 def save_qc_report(
     filtering_stats: Dict,
     thresholds: Optional[Dict],
@@ -558,10 +592,14 @@ def save_qc_report(
     """
     logger.info("Generating QC report...")
     
+    # Convert all numpy types to Python native types
+    filtering_stats = convert_to_serializable(filtering_stats)
+    thresholds = convert_to_serializable(thresholds) if thresholds else 'manual'
+    
     report = {
         'timestamp': datetime.now().isoformat(),
         'filtering_statistics': filtering_stats,
-        'thresholds_applied': thresholds if thresholds else 'manual',
+        'thresholds_applied': thresholds,
         'qc_metrics_before': {
             'n_genes_by_counts': {
                 'median': float(adata_before.obs['n_genes_by_counts'].median()),
@@ -600,10 +638,10 @@ def save_qc_report(
             }
         }
     
-    # Save JSON report
+    # Save JSON report (use custom encoder for numpy types)
     report_path = output_dir / "qc_report.json"
     with open(report_path, 'w') as f:
-        json.dump(report, f, indent=2)
+        json.dump(report, f, indent=2, cls=NumpyEncoder)
     logger.info(f"  ✓ Saved: qc_report.json")
     
     # Save metrics CSV
@@ -634,11 +672,11 @@ def main():
         adata = sc.read_h5ad(args.input)
         logger.info(f"  Loaded: {adata.n_obs} cells × {adata.n_vars} genes")
         
-        # Keep copy for before/after comparison
-        adata_before = adata.copy()
-        
         # Calculate QC metrics
         adata = calculate_qc_metrics(adata)
+        
+        # Keep copy for before/after comparison (after QC metrics calculated)
+        adata_before = adata.copy()
         
         # Calculate MAD thresholds if requested
         thresholds = None
