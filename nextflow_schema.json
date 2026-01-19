@@ -1,0 +1,255 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "https://raw.githubusercontent.com/your-org/scannex/master/nextflow_schema.json",
+    "title": "scAnnex pipeline parameters",
+    "description": "Single-cell RNA-seq downstream analysis pipeline",
+    "type": "object",
+    "definitions": {
+        "input_output_options": {
+            "title": "Input/output options",
+            "type": "object",
+            "fa_icon": "fas fa-terminal",
+            "description": "Define where the pipeline should find input data and save output data.",
+            "required": ["input", "outdir"],
+            "properties": {
+                "input": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to input file (H5AD, RDS, or MTX directory)",
+                    "fa_icon": "fas fa-file"
+                },
+                "input_type": {
+                    "type": "string",
+                    "default": "h5ad",
+                    "enum": ["h5ad", "rds", "mtx"],
+                    "description": "Type of input file",
+                    "fa_icon": "fas fa-file-code"
+                },
+                "outdir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "The output directory where the results will be saved.",
+                    "default": "./results",
+                    "fa_icon": "fas fa-folder-open"
+                }
+            }
+        },
+        "quality_control_options": {
+            "title": "Quality control options",
+            "type": "object",
+            "description": "Parameters for quality control filtering",
+            "properties": {
+                "min_genes": {
+                    "type": "integer",
+                    "default": 200,
+                    "description": "Minimum number of genes per cell",
+                    "fa_icon": "fas fa-filter"
+                },
+                "min_cells": {
+                    "type": "integer",
+                    "default": 3,
+                    "description": "Minimum number of cells per gene",
+                    "fa_icon": "fas fa-filter"
+                },
+                "max_genes": {
+                    "type": "integer",
+                    "description": "Maximum number of genes per cell (optional)",
+                    "fa_icon": "fas fa-filter"
+                },
+                "max_counts": {
+                    "type": "integer",
+                    "description": "Maximum number of counts per cell (optional)",
+                    "fa_icon": "fas fa-filter"
+                },
+                "max_mito_percent": {
+                    "type": "number",
+                    "default": 20,
+                    "description": "Maximum mitochondrial percentage",
+                    "fa_icon": "fas fa-percentage"
+                }
+            }
+        },
+        "doublet_detection_options": {
+            "title": "Doublet detection options",
+            "type": "object",
+            "description": "Parameters for doublet detection",
+            "properties": {
+                "run_doublet_detection": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run doublet detection with Scrublet",
+                    "fa_icon": "fas fa-check-circle"
+                },
+                "expected_doublet_rate": {
+                    "type": "number",
+                    "default": 0.05,
+                    "description": "Expected doublet rate",
+                    "fa_icon": "fas fa-calculator"
+                }
+            }
+        },
+        "normalization_options": {
+            "title": "Normalization options",
+            "type": "object",
+            "description": "Parameters for normalization",
+            "properties": {
+                "normalization_method": {
+                    "type": "string",
+                    "default": "log",
+                    "enum": ["log", "scran"],
+                    "description": "Normalization method",
+                    "fa_icon": "fas fa-balance-scale"
+                },
+                "target_sum": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Target sum for normalization",
+                    "fa_icon": "fas fa-bullseye"
+                }
+            }
+        },
+        "integration_options": {
+            "title": "Batch integration options",
+            "type": "object",
+            "description": "Parameters for batch correction",
+            "properties": {
+                "run_integration": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run batch integration",
+                    "fa_icon": "fas fa-layer-group"
+                },
+                "batch_key": {
+                    "type": "string",
+                    "description": "Column name in obs containing batch information",
+                    "fa_icon": "fas fa-key"
+                },
+                "integration_method": {
+                    "type": "string",
+                    "default": "harmony",
+                    "enum": ["harmony", "scanorama", "bbknn"],
+                    "description": "Integration method",
+                    "fa_icon": "fas fa-cogs"
+                }
+            }
+        },
+        "dimensionality_reduction_options": {
+            "title": "Dimensionality reduction options",
+            "type": "object",
+            "description": "Parameters for PCA and UMAP",
+            "properties": {
+                "n_pcs": {
+                    "type": "integer",
+                    "default": 50,
+                    "description": "Number of principal components",
+                    "fa_icon": "fas fa-chart-line"
+                },
+                "n_neighbors": {
+                    "type": "integer",
+                    "default": 15,
+                    "description": "Number of neighbors for UMAP",
+                    "fa_icon": "fas fa-project-diagram"
+                },
+                "umap_min_dist": {
+                    "type": "number",
+                    "default": 0.5,
+                    "description": "Minimum distance for UMAP",
+                    "fa_icon": "fas fa-ruler"
+                }
+            }
+        },
+        "clustering_options": {
+            "title": "Clustering options",
+            "type": "object",
+            "description": "Parameters for clustering",
+            "properties": {
+                "clustering_method": {
+                    "type": "string",
+                    "default": "leiden",
+                    "enum": ["leiden", "louvain"],
+                    "description": "Clustering algorithm",
+                    "fa_icon": "fas fa-sitemap"
+                },
+                "clustering_resolutions": {
+                    "type": "string",
+                    "default": "0.4,0.8,1.0",
+                    "description": "Comma-separated list of clustering resolutions",
+                    "fa_icon": "fas fa-sliders-h"
+                }
+            }
+        },
+        "annotation_options": {
+            "title": "Annotation options",
+            "type": "object",
+            "description": "Parameters for cell type annotation",
+            "properties": {
+                "run_auto_annotation": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run automatic cell type annotation",
+                    "fa_icon": "fas fa-tag"
+                },
+                "marker_list": {
+                    "type": "string",
+                    "description": "Path to marker gene list file",
+                    "fa_icon": "fas fa-list"
+                }
+            }
+        },
+        "max_job_request_options": {
+            "title": "Max job request options",
+            "type": "object",
+            "fa_icon": "fab fa-acquisitions-incorporated",
+            "description": "Set the top limit for requested resources for any single job.",
+            "properties": {
+                "max_cpus": {
+                    "type": "integer",
+                    "description": "Maximum number of CPUs that can be requested for any single job.",
+                    "default": 16,
+                    "fa_icon": "fas fa-microchip"
+                },
+                "max_memory": {
+                    "type": "string",
+                    "description": "Maximum amount of memory that can be requested for any single job.",
+                    "default": "128.GB",
+                    "fa_icon": "fas fa-memory"
+                },
+                "max_time": {
+                    "type": "string",
+                    "description": "Maximum amount of time that can be requested for any single job.",
+                    "default": "240.h",
+                    "fa_icon": "far fa-clock"
+                }
+            }
+        }
+    },
+    "allOf": [
+        {
+            "$ref": "#/definitions/input_output_options"
+        },
+        {
+            "$ref": "#/definitions/quality_control_options"
+        },
+        {
+            "$ref": "#/definitions/doublet_detection_options"
+        },
+        {
+            "$ref": "#/definitions/normalization_options"
+        },
+        {
+            "$ref": "#/definitions/integration_options"
+        },
+        {
+            "$ref": "#/definitions/dimensionality_reduction_options"
+        },
+        {
+            "$ref": "#/definitions/clustering_options"
+        },
+        {
+            "$ref": "#/definitions/annotation_options"
+        },
+        {
+            "$ref": "#/definitions/max_job_request_options"
+        }
+    ]
+}

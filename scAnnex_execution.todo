@@ -1,0 +1,470 @@
+scAnnex Pipeline Implementation Tracker
+Generated: 2026-01-19 11:27 UTC
+Source of Truth: InitProject.md
+
+═══════════════════════════════════════════════════════════════════════════
+PIPELINE STATUS SUMMARY
+═══════════════════════════════════════════════════════════════════════════
+
+✅ DISCOVERED: Complete Nextflow pipeline skeleton exists
+✅ DISCOVERED: All 6 core modules implemented with basic functionality
+✅ DISCOVERED: Wave containers configured
+⚠️  NEEDS: Enhanced implementations per InitProject.md critical specifications
+⚠️  NEEDS: Apptainer profile addition to nextflow.config
+⚠️  NEEDS: Samplesheet-based multi-sample input handling
+⚠️  NEEDS: Dashboard implementation (currently missing)
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 0: Infrastructure Enhancement
+═══════════════════════════════════════════════════════════════════════════
+
+✔ Scan existing workspace for reusable scripts
+✔ Create Nextflow project directory structure
+✔ Initialize nextflow.config with basic profiles
+✔ Create conf/base.config for resource management
+✔ Define nextflow_schema.json for parameter validation
+☐ ADD: Apptainer profile to nextflow.config (per InitProject.md requirement)
+☐ CREATE: test_data/ directory structure with sample files
+☐ ENHANCE: Container strategy documentation
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 1: UNIFY_INPUT Module Enhancement (PRIORITY)
+═══════════════════════════════════════════════════════════════════════════
+
+⏳ STATUS: In Progress - Enhancements Required
+
+bin/unify_input.py - Current State Analysis:
+  ✔ Basic argument parser exists (--input, --input-type, --output)
+  ✔ H5AD reader implemented (ad.read_h5ad)
+  ✔ 10x MTX reader implemented (sc.read_10x_mtx)
+  ⚠️  RDS converter uses anndata2ri (CRITICAL ISSUE per InitProject.md)
+  
+bin/unify_input.py - Required Enhancements:
+  ☐ CRITICAL: Replace anndata2ri with SeuratDisk method
+      - Step 1: R script to convert RDS → h5seurat (SaveH5Seurat)
+      - Step 2: Python conversion h5seurat → h5ad with full control
+      - Reason: anndata2ri loses metadata, fails on Seurat v5 objects
+  
+  ☐ ADD: Samplesheet metadata integration
+      - Parse sample_id, batch, condition from metadata dict
+      - Store in adata.obs with proper column naming
+  
+  ☐ STANDARDIZE: AnnData structure per InitProject.md Section 9
+      - .obs: Must include ['sample_id', 'batch', 'condition']
+      - .var: Must include gene names as index
+      - .uns: Store conversion metadata, parameters
+      - .layers: Preserve raw counts as 'counts' layer
+      - .obsm: Initialize empty (for future PCA/UMAP)
+  
+  ☐ ENHANCE: Logging system
+      - Add timestamps to all log messages
+      - Log input format, dimensions, memory usage
+      - Log version info (scanpy, anndata, numpy, pandas)
+  
+  ☐ ADD: Comprehensive error handling
+      - Validate file existence before processing
+      - Check for required columns in MTX files
+      - Handle corrupted H5AD files gracefully
+      - Provide actionable error messages
+  
+  ☐ ADD: Google-style docstrings for all functions
+  
+  ☐ CREATE: Unit test suite (tests/unit/test_unify_input.py)
+      - Test each input format converter
+      - Test metadata integration
+      - Test AnnData structure validation
+      - Mock file I/O for fast tests
+
+modules/local/unify_input.nf - Current State:
+  ✔ Process structure follows nf-core standards
+  ✔ Proper tagging with meta.id
+  ✔ Label 'process_low' assigned
+  ✔ Wave container configured
+  ✔ versions.yml emission implemented
+  
+modules/local/unify_input.nf - Required Enhancements:
+  ☐ ADD: Support for additional metadata passing
+      - Pass batch_key, condition_key as parameters
+      - Enable flexible metadata column mapping
+  
+  ☐ ADD: Conditional R environment activation for RDS
+      - Detect input_type == 'rds'
+      - Load R/Seurat container or conda env
+      - Execute two-step conversion
+  
+  ☐ ENHANCE: Error strategy
+      - Add retry with exponential backoff for large files
+      - Implement memory scaling on retry
+  
+  ☐ ADD: PublishDir directive
+      - Save unified H5AD to results/unified_input/
+      - Use params.publish_dir_mode
+
+Workflow Integration:
+  ☐ MODIFY: workflows/scannex.nf to support samplesheet
+      - Replace single file channel with samplesheet parser
+      - Use nf-validation plugin for schema validation
+      - Create channel: [meta, filepath] from CSV rows
+  
+  ☐ CREATE: Samplesheet schema (assets/schema_input.json)
+      - Define required columns: sample_id, file_type, file_path
+      - Optional columns: batch, condition, group
+      - Validate file_type enum: [h5ad, rds, mtx]
+
+Testing Plan:
+  ☐ CREATE: test_data/samplesheet_test.csv
+  ☐ DOWNLOAD: 10x PBMC 1k dataset for MTX test
+  ☐ CREATE: Minimal H5AD test file (100 cells)
+  ☐ CREATE: Seurat RDS test file (or convert PBMC to RDS)
+  ☐ RUN: Nextflow test profile with all three formats
+  ☐ VALIDATE: Output structure matches conventions
+  ☐ VERIFY: Metadata correctly integrated
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 2: QC Module Enhancement
+═══════════════════════════════════════════════════════════════════════════
+
+Current State:
+  ✔ bin/quality_control.py exists
+  ✔ modules/local/quality_control.nf exists
+
+Required Enhancements:
+  ☐ VERIFY: Mitochondrial % calculation (genes starting with MT-)
+  ☐ ADD: Ribosomal % calculation (genes starting with RPL/RPS)
+  ☐ ADD: Hemoglobin % calculation (genes starting with HB)
+  ☐ ENHANCE: QC plots with publication-quality styling
+  ☐ ADD: Interactive threshold preview capability
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 3: DOUBLET_DETECTION Module Enhancement
+═══════════════════════════════════════════════════════════════════════════
+
+Current State:
+  ✔ bin/doublet_detection.py exists (using Scrublet)
+  ✔ modules/local/doublet_detection.nf exists
+
+Required Validation per InitProject.md:
+  ☐ VALIDATE: Performance on >50k cells datasets
+  ☐ RESEARCH: Alternative tools (scDblFinder, DoubletFinder)
+  ☐ ADD: Automatic tool selection based on cell count
+  ☐ ADD: Skip parameter implementation
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 4: NORMALIZE_INTEGRATE Module Enhancement
+═══════════════════════════════════════════════════════════════════════════
+
+Current State:
+  ✔ bin/normalize_integrate.py exists
+  ✔ modules/local/normalize_integrate.nf exists
+
+CRITICAL Enhancements per InitProject.md:
+  ☐ VERIFY: Using scanpy.external.pp.harmony (not harmonypy wrapper)
+  ☐ ADD: Pre-integration checkpoint saving (for rollback)
+  ☐ IMPLEMENT: Batch variation validation before Harmony
+      - Harmony can fail silently without variation
+      - Calculate per-batch statistics
+      - Warn if insufficient batch effect detected
+  
+  ☐ IMPLEMENT: Integration quality metrics
+      - kBET (k-nearest neighbor batch effect test)
+      - LISI (Local Inverse Simpson's Index)
+  
+  ☐ GENERATE: Pre/post integration comparison plots
+      - UMAP colored by batch (before/after)
+      - Silhouette scores
+      - Batch mixing metrics visualization
+  
+  ☐ ADD: Integration failure handling
+      - Detect failed integration (no batch mixing improvement)
+      - Automatic rollback to pre-integration state
+      - Warning messages to user
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 5: DIMENSIONALITY_REDUCTION Module Enhancement
+═══════════════════════════════════════════════════════════════════════════
+
+Current State:
+  ✔ bin/ script exists
+  ✔ modules/local/dimensionality_reduction.nf exists
+
+Required Enhancements:
+  ☐ VERIFY: PCA coordinates saved to .obsm['X_pca']
+  ☐ VERIFY: UMAP coordinates saved to .obsm['X_umap']
+  ☐ ADD: Export umap_coordinates.csv for dashboard
+      - Columns: cell_id, UMAP_1, UMAP_2, sample_id
+  ☐ ADD: Export cell_metadata.csv for dashboard
+      - Include QC metrics, batch info, cluster assignments
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 6: AUTO_ANNOTATION Module Enhancement
+═══════════════════════════════════════════════════════════════════════════
+
+Current State:
+  ✔ modules/local/auto_annotation.nf exists
+
+CRITICAL Requirements per InitProject.md:
+  ☐ IMPLEMENT: Leiden clustering at multiple resolutions
+      - Default: 0.4, 0.8, 1.0 (from params.clustering_resolutions)
+      - Store as leiden_res_0.4, leiden_res_0.8, etc.
+  
+  ☐ IMPLEMENT: Reference marker-based annotation
+      - Load marker CSV/GMT file
+      - Score each cluster against cell type signatures
+      - Assign preliminary labels
+  
+  ☐ ENFORCE: Label all annotations as "PRELIMINARY"
+      - Add suffix to all auto-annotation columns
+      - Clear documentation in .uns metadata
+      - Warning in output logs
+  
+  ☐ CREATE: Default marker gene lists
+      - PBMC cell types (T cells, B cells, Monocytes, NK, DC)
+      - Store in assets/markers/pbmc_markers.csv
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 7: Workflow Architecture Enhancement
+═══════════════════════════════════════════════════════════════════════════
+
+Current: Single file input via params.input
+Target: Samplesheet-based multi-sample processing
+
+  ☐ IMPLEMENT: Samplesheet parser
+      - Use nf-validation plugin
+      - Reference: nf-core/scrnaseq input handling
+  
+  ☐ CREATE: Channel factory functions
+      - validateInputSamplesheet()
+      - createInputChannel()
+  
+  ☐ IMPLEMENT: Per-sample processing
+      - Each sample processed independently through QC
+      - Optional: Merge samples before integration
+      - Optional: Keep separate for batch correction
+  
+  ☐ ADD: Version collection workflow
+      - Aggregate all versions.yml files
+      - Create unified version report
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 8: Dashboard Implementation (MISSING - HIGH PRIORITY)
+═══════════════════════════════════════════════════════════════════════════
+
+⚠️  STATUS: Not Started - Critical per InitProject.md
+
+dashboard/ directory structure:
+  ☐ CREATE: dashboard/app.R (main Shiny app)
+  ☐ CREATE: dashboard/server.R (server logic)
+  ☐ CREATE: dashboard/ui.R (UI components)
+  ☐ CREATE: dashboard/global.R (shared functions)
+  ☐ CREATE: dashboard/modules/ (modular Shiny components)
+
+Tab 1 - QC Overview:
+  ☐ IMPLEMENT: Violin plots for QC metrics
+  ☐ IMPLEMENT: Scatter plots (nFeature vs nCount)
+  ☐ IMPLEMENT: Interactive threshold sliders
+  ☐ ADD: Real-time cell count preview
+
+Tab 2 - Clustering & Visualization:
+  ☐ IMPLEMENT: Interactive UMAP with plotly
+  ☐ ADD: Toggle between clustering resolutions
+  ☐ ADD: Toggle between auto-annotation labels
+  ☐ ADD: Color by metadata (batch, condition, QC metrics)
+  ☐ IMPLEMENT: Lasso selection for subsetting
+
+Tab 3 - Manual Curation & Biomarkers:
+  ☐ IMPLEMENT: Gene expression search
+  ☐ IMPLEMENT: FeaturePlot generation (UMAP colored by gene)
+  ☐ IMPLEMENT: AUCell signature scoring
+      - Upload custom gene sets (.gmt/.csv)
+      - Calculate AUC scores on-demand
+      - Show progress with withProgress()
+  
+  ☐ CREATE: Default gene set collections
+      - assets/gene_sets/immune_signatures.gmt
+      - assets/gene_sets/cell_cycle.gmt
+      - assets/gene_sets/stress_response.gmt
+  
+  ☐ IMPLEMENT: Cluster renaming module
+      - Click cluster → enter new name
+      - Save to adata.obs['manual_annotation']
+      - Export updated H5AD
+  
+  ☐ IMPLEMENT: Export functionality
+      - Download annotated .h5ad
+      - Download UMAP plots (PNG/PDF)
+      - Download cluster annotation table (CSV)
+      - Download cell metadata table
+      - Download marker gene tables
+
+Performance Optimization:
+  ☐ IMPLEMENT: Backed H5AD reading
+      - Load only metadata at startup
+      - Read gene expression on-demand
+  
+  ☐ IMPLEMENT: Alternative data exports
+      - Pre-export lightweight CSV files from pipeline
+      - Use parquet for large metadata tables
+      - Create SQLite database for gene queries
+
+Deployment:
+  ☐ CREATE: Dockerfile for Shiny app
+  ☐ DOCUMENT: ShinyProxy deployment instructions
+  ☐ DOCUMENT: Posit Connect deployment instructions
+  ☐ TEST: Multi-user concurrent access (RAM usage)
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 9: Configuration Enhancements
+═══════════════════════════════════════════════════════════════════════════
+
+nextflow.config:
+  ☐ ADD: Apptainer profile (CRITICAL per InitProject.md)
+      ```groovy
+      apptainer {
+          apptainer.enabled = true
+          apptainer.autoMounts = true
+          docker.enabled = false
+          singularity.enabled = false
+      }
+      ```
+  
+  ☐ ENHANCE: Test profile with samplesheet
+  ☐ ADD: HPC profile templates (SLURM, PBS, SGE)
+
+conf/modules.config:
+  ☐ REVIEW: Process-specific parameter overrides
+  ☐ ADD: Per-module container specifications
+  ☐ ADD: Process directives (publishDir, cpus, memory)
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 10: Testing & Validation
+═══════════════════════════════════════════════════════════════════════════
+
+Test Data Preparation:
+  ☐ DOWNLOAD: 10x PBMC 1k v3 dataset
+      ```bash
+      wget https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_filtered_feature_bc_matrix.h5
+      ```
+  
+  ☐ CREATE: Artificial batch2 with simulated batch effect
+  ☐ CONVERT: PBMC to multiple formats (H5AD, RDS, MTX)
+  ☐ CREATE: Samplesheet with mixed input formats
+
+Unit Tests:
+  ☐ CREATE: tests/unit/test_unify_input.py
+  ☐ CREATE: tests/unit/test_qc.py
+  ☐ CREATE: tests/unit/test_normalize.py
+  ☐ RUN: pytest with coverage report
+
+Integration Tests:
+  ☐ CREATE: tests/integration/test_full_pipeline.nf
+  ☐ TEST: Single sample end-to-end
+  ☐ TEST: Multi-sample with batch correction
+  ☐ TEST: All input format combinations
+  ☐ VALIDATE: Output file structure
+  ☐ VALIDATE: AnnData metadata conventions
+
+Performance Tests:
+  ☐ BENCHMARK: 10k cells dataset
+  ☐ BENCHMARK: 100k cells dataset
+  ☐ PROFILE: Memory usage per module
+  ☐ PROFILE: Runtime per module
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 11: Documentation
+═══════════════════════════════════════════════════════════════════════════
+
+User Documentation:
+  ☐ ENHANCE: README.md with samplesheet examples
+  ☐ CREATE: docs/usage.md (detailed usage guide)
+  ☐ CREATE: docs/input_formats.md (format specifications)
+  ☐ CREATE: docs/parameters.md (all parameters explained)
+  ☐ CREATE: docs/output.md (output file descriptions)
+  ☐ CREATE: docs/dashboard.md (dashboard user guide)
+
+Developer Documentation:
+  ☐ CREATE: docs/developer_guide.md
+  ☐ CREATE: docs/module_development.md
+  ☐ DOCUMENT: Container building process
+  ☐ DOCUMENT: Testing procedures
+
+Troubleshooting:
+  ☐ CREATE: docs/troubleshooting.md
+      - Common error messages
+      - Memory issues solutions
+      - Container-related problems
+      - Input format issues
+
+Examples:
+  ☐ CREATE: examples/basic_analysis.sh
+  ☐ CREATE: examples/batch_correction.sh
+  ☐ CREATE: examples/full_annotation_pipeline.sh
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 12: Container & Deployment
+═══════════════════════════════════════════════════════════════════════════
+
+Python/Scanpy Container:
+  ☐ OPTION 1: Continue using Wave (current approach)
+      - Define exact package versions in config
+      - Test Wave-generated containers
+  
+  ☐ OPTION 2: Create custom Dockerfile
+      - Base: python:3.10-slim
+      - Install: scanpy==1.9.8, harmonypy==0.0.10, etc.
+      - Test locally before deployment
+
+R/Seurat Container (for RDS conversion):
+  ☐ CREATE: containers/seurat/Dockerfile
+      - Base: rocker/r-ver:4.3
+      - Install: Seurat, SeuratDisk, reticulate
+      - Include Python for h5seurat conversion
+  
+  ☐ BUILD: Docker image
+  ☐ TEST: RDS conversion workflow
+  ☐ CONVERT: to Singularity/Apptainer .sif
+
+Shiny Dashboard Container:
+  ☐ CREATE: dashboard/Dockerfile
+      - Base: rocker/shiny:4.3
+      - Install: plotly, reticulate, anndata
+      - Copy dashboard/ files
+  
+  ☐ TEST: Container locally
+  ☐ DOCUMENT: Docker run command
+
+HPC Deployment:
+  ☐ CONVERT: All containers to Apptainer .sif
+  ☐ TEST: On HPC environment (SLURM)
+  ☐ OPTIMIZE: Resource allocations for HPC
+  ☐ CREATE: HPC-specific config profile
+
+═══════════════════════════════════════════════════════════════════════════
+Notes & Decisions Log
+═══════════════════════════════════════════════════════════════════════════
+
+2026-01-19 11:27:
+  - Initial todo file created
+  - Comprehensive workspace scan completed
+  - Discovered existing implementation with basic functionality
+  - Identified key gaps vs InitProject.md specifications:
+    1. RDS conversion uses problematic anndata2ri method
+    2. No samplesheet-based multi-sample support
+    3. Dashboard completely missing
+    4. Apptainer profile not configured
+    5. Integration quality metrics not implemented
+    6. Testing infrastructure incomplete
+
+Priority Ranking:
+  1. HIGH: Enhance UNIFY_INPUT with SeuratDisk method
+  2. HIGH: Implement samplesheet-based input
+  3. HIGH: Add Apptainer profile
+  4. HIGH: Implement Dashboard (Phase 8)
+  5. MEDIUM: Add integration quality metrics (kBET, LISI)
+  6. MEDIUM: Enhance testing infrastructure
+  7. LOW: Performance optimization for >500k cells
+
+Next Immediate Action:
+  → Focus on UNIFY_INPUT module enhancement
+  → Implement proper RDS conversion method
+  → Add metadata standardization
+  → Create comprehensive test suite

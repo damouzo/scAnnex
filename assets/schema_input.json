@@ -1,0 +1,43 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "https://raw.githubusercontent.com/yourusername/scAnnex/main/assets/schema_input.json",
+    "title": "scAnnex pipeline - params.input schema",
+    "description": "Schema for the file provided with params.input",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "sample_id": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Sample identifier must be provided and cannot contain spaces",
+                "meta": ["id"]
+            },
+            "file_type": {
+                "type": "string",
+                "pattern": "^(h5ad|rds|mtx)$",
+                "errorMessage": "File type must be 'h5ad', 'rds', or 'mtx'",
+                "meta": ["file_type"]
+            },
+            "file_path": {
+                "type": "string",
+                "format": "file-path",
+                "pattern": "^\\S+$",
+                "errorMessage": "File path must be provided and cannot contain spaces"
+            },
+            "batch": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Batch identifier cannot contain spaces",
+                "meta": ["batch"]
+            },
+            "condition": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Condition identifier cannot contain spaces",
+                "meta": ["condition"]
+            }
+        },
+        "required": ["sample_id", "file_type", "file_path", "batch", "condition"]
+    }
+}
