@@ -252,62 +252,9 @@ adata.obs['celltype_azimuth']     # Azimuth predictions (if enabled)
 adata.obs['celltype_consensus']   # Merged consensus labels (if multi-tool)
 ```
 
-## Troubleshooting
-
-### Out of Memory Errors
-
-For large datasets (>100k cells), reduce memory usage:
-
-```bash
-nextflow run main.nf \
-  --input large_data.h5ad \
-  --n_top_genes 1000 \      # Reduce HVGs
-  --n_pcs 30 \              # Reduce PCs
-  --harmony_max_iter 5 \    # Reduce Harmony iterations
-  -profile docker
-```
-
-### Slow Integration
-
-Harmony integration can be slow on large datasets. Use optimized parameters:
-
-```bash
-nextflow run main.nf \
-  --input data.h5ad \
-  --run_integration true \
-  --n_top_genes 1000 \
-  --n_pcs 20 \
-  --harmony_max_iter 5 \
-  -profile docker
-```
-
-### Docker Permission Errors (Linux)
-
-Add user to docker group:
-
-```bash
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-## Citation
-
-If you use scAnnex in your research, please cite:
-
-```
-scAnnex: A Nextflow pipeline for reproducible single-cell RNA-seq analysis
-[Author], [Year]
-```
-
 ## License
 
 MIT License. See `LICENSE` file for details.
-
-## Technical Support
-
-- **Documentation**: See `docs/` directory for detailed guides
-- **Issues**: Report bugs via GitHub Issues
-- **Technical Details**: See `docs/AUDIT_REPORT_2026-01-19.md` for complete implementation notes
 
 ## Software Dependencies
 
