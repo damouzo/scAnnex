@@ -147,6 +147,44 @@ Examples:
         help="MAD multiplier for outlier detection (default: 5.0)"
     )
     
+    # Quantile-based thresholds (SLC Best Practice)
+    parser.add_argument(
+        "--use-quantile-filtering",
+        action="store_true",
+        help="Use quantile-based filtering (SLC method)"
+    )
+    parser.add_argument(
+        "--feature-quantile-low",
+        type=float,
+        default=0.10,
+        help="Lower quantile for nFeatures (default: 0.10 = 10th percentile)"
+    )
+    parser.add_argument(
+        "--feature-quantile-high",
+        type=float,
+        default=0.90,
+        help="Upper quantile for nFeatures (default: 0.90 = 90th percentile)"
+    )
+    parser.add_argument(
+        "--count-quantile-low",
+        type=float,
+        default=0.10,
+        help="Lower quantile for nCounts (default: 0.10)"
+    )
+    parser.add_argument(
+        "--count-quantile-high",
+        type=float,
+        default=0.90,
+        help="Upper quantile for nCounts (default: 0.90)"
+    )
+    
+    # Save options
+    parser.add_argument(
+        "--save-attrition-log",
+        action="store_true",
+        help="Save detailed cell attrition log (CSV)"
+    )
+    
     # Options
     parser.add_argument(
         "--skip-filtering",
@@ -155,6 +193,63 @@ Examples:
     )
     
     return parser.parse_args()
+
+
+def calculate_quantile_thresholds(
+    adata: sc.AnnData,
+    feature_low: float = 0.10,
+    feature_high: float = 0.90,
+    count_low: float = 0.10,
+    count_high: float = 0.90
+) -> Dict[str, Tuple[float, float]]:
+    """Calculate quantile-based thresholds for QC metrics (SLC Best Practice).
+    
+    Uses quantiles to identify outliers:
+    - nFeatures: 10th and 90th percentile
+    - nCounts: 10th and 90th percentile
+    - MT%: Hard upper threshold only
+    
+    Args:
+        adata: AnnData object with calculated QC metrics
+        feature_low: Lower quantile for features (default: 0.10)
+        feature_high: Upper quantile for features (default: 0.90)
+        count_low: Lower quantile for counts (default: 0.10)
+        count_high: Upper quantile for counts (default: 0.90)
+        
+    Returns:
+        Dict of metric: (lower_threshold, upper_threshold)
+    """
+    logger.info(f"Calculating quantile-based thresholds (SLC method)...")
+    
+    thresholds = {}
+    
+    # Features (genes) - use quantiles
+    feature_lower = adata.obs['n_genes_by_counts'].quantile(feature_low)
+    feature_upper = adata.obs['n_genes_by_counts'].quantile(feature_high)
+    thresholds['n_genes_by_counts'] = (feature_lower, feature_upper)
+    logger.info(f"  n_genes_by_counts:")
+    logger.info(f"    {feature_low*100:.0f}th percentile: {feature_lower:.0f}")
+    logger.info(f"    {feature_high*100:.0f}th percentile: {feature_upper:.0f}")
+    
+    # Counts - use quantiles
+    count_lower = adata.obs['total_counts'].quantile(count_low)
+    count_upper = adata.obs['total_counts'].quantile(count_high)
+    thresholds['total_counts'] = (count_lower, count_upper)
+    logger.info(f"  total_counts:")
+    logger.info(f"    {count_low*100:.0f}th percentile: {count_lower:.0f}")
+    logger.info(f"    {count_high*100:.0f}th percentile: {count_upper:.0f}")
+    
+    # MT% - no quantile, will use hard threshold
+    thresholds['pct_counts_mt'] = (0, np.inf)
+    logger.info(f"  pct_counts_mt: Using hard threshold (if provided)")
+    
+    # Ribosomal and hemoglobin - no quantile filtering by default
+    if 'pct_counts_ribo' in adata.obs.columns:
+        thresholds['pct_counts_ribo'] = (0, np.inf)
+    if 'pct_counts_hb' in adata.obs.columns:
+        thresholds['pct_counts_hb'] = (0, np.inf)
+    
+    return thresholds
 
 
 def calculate_mad_thresholds(
@@ -433,6 +528,8 @@ def apply_qc_filters(
 ) -> Tuple[sc.AnnData, Dict]:
     """Apply QC filters to remove low-quality cells and genes.
     
+    SLC Enhancement: Tracks detailed cell attrition at each step.
+    
     Args:
         adata: Input AnnData object
         min_genes: Minimum genes per cell
@@ -442,100 +539,128 @@ def apply_qc_filters(
         max_mito: Maximum mitochondrial % (or use thresholds)
         max_ribo: Maximum ribosomal %
         max_hb: Maximum hemoglobin %
-        thresholds: MAD-based thresholds (overrides manual values)
+        thresholds: Quantile/MAD-based thresholds (overrides manual values)
         
     Returns:
-        Tuple of (filtered_adata, filtering_stats)
+        Tuple of (filtered_adata, filtering_stats with attrition log)
     """
-    logger.info("Applying QC filters...")
+    logger.info("Applying QC filters (SLC method with Cell Attrition Log)...")
     
-    n_cells_before = adata.n_obs
-    n_genes_before = adata.n_vars
+    n_cells_initial = adata.n_obs
+    n_genes_initial = adata.n_vars
     
-    # Use MAD thresholds if provided
+    # Use quantile/MAD thresholds if provided
     if thresholds:
-        logger.info("  Using MAD-based thresholds")
-        if 'n_genes_by_counts' in thresholds and max_genes is None:
-            _, max_genes = thresholds['n_genes_by_counts']
-            max_genes = int(max_genes) if max_genes < np.inf else None
+        logger.info("  Using automatic thresholds")
+        if 'n_genes_by_counts' in thresholds:
+            min_genes_auto, max_genes_auto = thresholds['n_genes_by_counts']
+            # Override min_genes if quantile-based threshold is higher
+            if min_genes_auto > min_genes:
+                min_genes = int(min_genes_auto)
+            if max_genes is None and max_genes_auto < np.inf:
+                max_genes = int(max_genes_auto)
         if 'total_counts' in thresholds and max_counts is None:
             _, max_counts = thresholds['total_counts']
             max_counts = int(max_counts) if max_counts < np.inf else None
         if 'pct_counts_mt' in thresholds and max_mito is None:
             _, max_mito = thresholds['pct_counts_mt']
+            # Keep manual max_mito if provided, it takes precedence
     
-    # Track filtering steps
-    filtering_stats = {
-        'cells_before': n_cells_before,
-        'genes_before': n_genes_before
-    }
+    # Initialize Cell Attrition Log
+    attrition_log = []
+    current_cells = n_cells_initial
     
-    # Filter cells - minimum genes
+    def log_filter_step(step_name: str, filter_type: str, threshold: str, 
+                       cells_before: int, cells_after: int):
+        """Helper to log each filtering step."""
+        cells_removed = cells_before - cells_after
+        pct_removed = (cells_removed / n_cells_initial) * 100 if n_cells_initial > 0 else 0
+        attrition_log.append({
+            'step': step_name,
+            'filter_type': filter_type,
+            'threshold': threshold,
+            'cells_before': cells_before,
+            'cells_after': cells_after,
+            'cells_removed': cells_removed,
+            'pct_of_initial': round(pct_removed, 2)
+        })
+        logger.info(f"  {step_name}: Removed {cells_removed} cells ({pct_removed:.2f}% of initial)")
+    
+    # Filter 1: Minimum genes per cell
     cells_before = adata.n_obs
     sc.pp.filter_cells(adata, min_genes=min_genes)
-    cells_removed = cells_before - adata.n_obs
-    logger.info(f"  Removed {cells_removed} cells with < {min_genes} genes")
-    filtering_stats['cells_min_genes'] = cells_removed
+    cells_after = adata.n_obs
+    log_filter_step('Min Genes Filter', 'nFeature_RNA', f'>= {min_genes}', 
+                   cells_before, cells_after)
     
-    # Filter cells - maximum genes
-    if max_genes:
+    # Filter 2: Maximum genes per cell (quantile-based)
+    if max_genes and max_genes < np.inf:
         cells_before = adata.n_obs
-        adata = adata[adata.obs.n_genes_by_counts < max_genes, :].copy()
-        cells_removed = cells_before - adata.n_obs
-        logger.info(f"  Removed {cells_removed} cells with > {max_genes} genes")
-        filtering_stats['cells_max_genes'] = cells_removed
+        adata = adata[adata.obs.n_genes_by_counts <= max_genes, :].copy()
+        cells_after = adata.n_obs
+        log_filter_step('Max Genes Filter', 'nFeature_RNA', f'<= {max_genes}', 
+                       cells_before, cells_after)
     
-    # Filter cells - maximum counts
-    if max_counts:
+    # Filter 3: Maximum counts per cell (quantile-based)
+    if max_counts and max_counts < np.inf:
         cells_before = adata.n_obs
-        adata = adata[adata.obs.total_counts < max_counts, :].copy()
-        cells_removed = cells_before - adata.n_obs
-        logger.info(f"  Removed {cells_removed} cells with > {max_counts} counts")
-        filtering_stats['cells_max_counts'] = cells_removed
+        adata = adata[adata.obs.total_counts <= max_counts, :].copy()
+        cells_after = adata.n_obs
+        log_filter_step('Max Counts Filter', 'nCount_RNA', f'<= {max_counts}', 
+                       cells_before, cells_after)
     
-    # Filter cells - mitochondrial %
-    if max_mito:
+    # Filter 4: Mitochondrial % (hard threshold)
+    if max_mito and max_mito < 100:
         cells_before = adata.n_obs
         adata = adata[adata.obs.pct_counts_mt < max_mito, :].copy()
-        cells_removed = cells_before - adata.n_obs
-        logger.info(f"  Removed {cells_removed} cells with > {max_mito:.1f}% MT")
-        filtering_stats['cells_max_mito'] = cells_removed
+        cells_after = adata.n_obs
+        log_filter_step('MT% Filter', 'percent.mt', f'< {max_mito:.1f}%', 
+                       cells_before, cells_after)
     
-    # Filter cells - ribosomal %
+    # Filter 5: Ribosomal % (optional)
     if max_ribo and 'pct_counts_ribo' in adata.obs.columns:
         cells_before = adata.n_obs
         adata = adata[adata.obs.pct_counts_ribo < max_ribo, :].copy()
-        cells_removed = cells_before - adata.n_obs
-        logger.info(f"  Removed {cells_removed} cells with > {max_ribo:.1f}% ribosomal")
-        filtering_stats['cells_max_ribo'] = cells_removed
+        cells_after = adata.n_obs
+        log_filter_step('Ribosomal% Filter', 'percent.ribo', f'< {max_ribo:.1f}%', 
+                       cells_before, cells_after)
     
-    # Filter cells - hemoglobin %
+    # Filter 6: Hemoglobin % (optional)
     if max_hb and 'pct_counts_hb' in adata.obs.columns:
         cells_before = adata.n_obs
         adata = adata[adata.obs.pct_counts_hb < max_hb, :].copy()
-        cells_removed = cells_before - adata.n_obs
-        logger.info(f"  Removed {cells_removed} cells with > {max_hb:.1f}% hemoglobin")
-        filtering_stats['cells_max_hb'] = cells_removed
+        cells_after = adata.n_obs
+        log_filter_step('Hemoglobin% Filter', 'percent.hb', f'< {max_hb:.1f}%', 
+                       cells_before, cells_after)
     
-    # Filter genes
+    # Filter genes (after cell filtering)
     genes_before = adata.n_vars
     sc.pp.filter_genes(adata, min_cells=min_cells)
-    genes_removed = genes_before - adata.n_vars
-    logger.info(f"  Removed {genes_removed} genes expressed in < {min_cells} cells")
-    filtering_stats['genes_min_cells'] = genes_removed
+    genes_after = adata.n_vars
+    genes_removed = genes_before - genes_after
+    logger.info(f"  Gene Filtering: Removed {genes_removed} genes expressed in < {min_cells} cells")
     
-    n_cells_after = adata.n_obs
-    n_genes_after = adata.n_vars
+    n_cells_final = adata.n_obs
+    n_genes_final = adata.n_vars
     
-    filtering_stats['cells_after'] = n_cells_after
-    filtering_stats['genes_after'] = n_genes_after
-    filtering_stats['cells_removed_total'] = n_cells_before - n_cells_after
-    filtering_stats['genes_removed_total'] = n_genes_before - n_genes_after
-    filtering_stats['cells_retained_pct'] = (n_cells_after / n_cells_before) * 100
-    filtering_stats['genes_retained_pct'] = (n_genes_after / n_genes_before) * 100
+    # Summary statistics
+    filtering_stats = {
+        'cells_initial': n_cells_initial,
+        'cells_final': n_cells_final,
+        'cells_removed_total': n_cells_initial - n_cells_final,
+        'cells_retained_pct': (n_cells_final / n_cells_initial * 100) if n_cells_initial > 0 else 0,
+        'genes_initial': n_genes_initial,
+        'genes_final': n_genes_final,
+        'genes_removed_total': n_genes_initial - n_genes_final,
+        'genes_retained_pct': (n_genes_final / n_genes_initial * 100) if n_genes_initial > 0 else 0,
+        'attrition_log': attrition_log
+    }
     
-    logger.info(f"  Final: {n_cells_after} cells ({filtering_stats['cells_retained_pct']:.1f}%) × "
-                f"{n_genes_after} genes ({filtering_stats['genes_retained_pct']:.1f}%)")
+    logger.info(f"\n  === Cell Attrition Summary ===")
+    logger.info(f"  Initial: {n_cells_initial} cells")
+    logger.info(f"  Final: {n_cells_final} cells ({filtering_stats['cells_retained_pct']:.1f}% retained)")
+    logger.info(f"  Total removed: {filtering_stats['cells_removed_total']} cells")
+    logger.info(f"\n  Genes: {n_genes_initial} → {n_genes_final} ({filtering_stats['genes_retained_pct']:.1f}% retained)")
     
     return adata, filtering_stats
 
@@ -678,10 +803,22 @@ def main():
         # Keep copy for before/after comparison (after QC metrics calculated)
         adata_before = adata.copy()
         
-        # Calculate MAD thresholds if requested
+        # Calculate thresholds (Quantile or MAD-based)
         thresholds = None
-        if args.use_mad_thresholds:
+        if args.use_quantile_filtering:
+            logger.info("\n📊 Using SLC Quantile-based filtering method")
+            thresholds = calculate_quantile_thresholds(
+                adata,
+                feature_low=args.feature_quantile_low,
+                feature_high=args.feature_quantile_high,
+                count_low=args.count_quantile_low,
+                count_high=args.count_quantile_high
+            )
+        elif args.use_mad_thresholds:
+            logger.info("\n📊 Using MAD-based automatic thresholds")
             thresholds = calculate_mad_thresholds(adata, nmads=args.mad_threshold)
+        else:
+            logger.info("\n📊 Using manual/hard thresholds")
         
         # Generate "before" plots
         logger.info("\nGenerating pre-filtering QC plots...")
@@ -709,6 +846,32 @@ def main():
             # Generate "after" plots
             logger.info("\nGenerating post-filtering QC plots...")
             plot_qc_metrics(adata_filtered, output_dir, prefix="qc_after", thresholds=None)
+            
+            # Save Cell Attrition Log (SLC)
+            if args.save_attrition_log and 'attrition_log' in filtering_stats:
+                logger.info("\n💾 Saving Cell Attrition Log...")
+                attrition_df = pd.DataFrame(filtering_stats['attrition_log'])
+                attrition_path = output_dir / "cell_attrition_log.csv"
+                attrition_df.to_csv(attrition_path, index=False)
+                logger.info(f"  ✓ Saved: cell_attrition_log.csv")
+                
+                # Also save as human-readable text
+                attrition_txt_path = output_dir / "cell_attrition_log.txt"
+                with open(attrition_txt_path, 'w') as f:
+                    f.write("=" * 80 + "\n")
+                    f.write("CELL ATTRITION LOG - scAnnex Quality Control\n")
+                    f.write("=" * 80 + "\n\n")
+                    f.write(f"Initial cells: {filtering_stats['cells_initial']}\n")
+                    f.write(f"Final cells: {filtering_stats['cells_final']}\n")
+                    f.write(f"Retention rate: {filtering_stats['cells_retained_pct']:.2f}%\n\n")
+                    f.write("-" * 80 + "\n")
+                    f.write(f"{'Step':<25} {'Filter':<15} {'Threshold':<20} {'Removed':<12} {'% of Initial':<12}\n")
+                    f.write("-" * 80 + "\n")
+                    for entry in filtering_stats['attrition_log']:
+                        f.write(f"{entry['step']:<25} {entry['filter_type']:<15} {entry['threshold']:<20} "
+                               f"{entry['cells_removed']:<12} {entry['pct_of_initial']:.2f}%\n")
+                    f.write("-" * 80 + "\n")
+                logger.info(f"  ✓ Saved: cell_attrition_log.txt")
         
         # Save QC report
         save_qc_report(

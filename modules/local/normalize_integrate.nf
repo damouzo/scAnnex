@@ -2,7 +2,8 @@ process NORMALIZE_INTEGRATE {
     tag "$meta.id"
     label 'process_high'
 
-    container "community.wave.seqera.io/library/scanpy_harmonypy:latest"
+    conda "${projectDir}/env/scanpy.yml"
+    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
 
     input:
     tuple val(meta), path(h5ad)

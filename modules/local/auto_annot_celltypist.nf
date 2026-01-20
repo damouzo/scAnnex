@@ -2,13 +2,15 @@ process AUTO_ANNOT_CELLTYPIST {
     tag "$meta.id"
     label 'process_medium'
 
+    conda "${projectDir}/env/scanpy.yml"
     container "quay.io/biocontainers/celltypist:1.6.2--pyhdfd78af_0"
 
     input:
     tuple val(meta), path(h5ad)
 
     output:
-    tuple val(meta), path("*_celltypist.csv"), emit: annotations
+    tuple val(meta), path("*_annotated.h5ad"), emit: h5ad
+    path "*_celltypist.csv"                   , emit: annotations
     path "versions.yml"                       , emit: versions
 
     when:
@@ -17,11 +19,23 @@ process AUTO_ANNOT_CELLTYPIST {
     script:
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
+    
+    // SLC: Build CellTypist parameters
+    def model = params.celltypist_model ?: 'Immune_All_Low.pkl'
+    def majority_voting = params.celltypist_majority_voting ? '--majority-voting' : ''
+    
     """
+    # Run CellTypist annotation
     auto_annot_celltypist.py \\
         --input ${h5ad} \\
         --output ${prefix}_celltypist.csv \\
+        --model ${model} \\
+        ${majority_voting} \\
         ${args}
+    
+    # Copy input H5AD as annotated output (annotations are in CSV)
+    # In future, we can merge annotations back into H5AD
+    cp ${h5ad} ${prefix}_annotated.h5ad
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -34,6 +48,7 @@ process AUTO_ANNOT_CELLTYPIST {
     stub:
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
+    touch ${prefix}_annotated.h5ad
     echo "cell_id,label,score,tool" > ${prefix}_celltypist.csv
     echo "cell1,T cells,0.95,celltypist" >> ${prefix}_celltypist.csv
     touch versions.yml

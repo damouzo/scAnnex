@@ -1,0 +1,40 @@
+# Extended Scanpy container with additional single-cell tools
+# Base: Scanpy 1.7.2 from Biocontainers
+FROM quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0
+
+LABEL maintainer="scAnnex Project"
+LABEL description="Extended Scanpy container with scrublet, harmonypy, and celltypist"
+LABEL version="1.7.2-extended"
+
+# Switch to root to install system dependencies
+USER root
+
+# Install build tools required for Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install additional Python packages
+RUN pip install --no-cache-dir \
+    scrublet==0.2.3 \
+    harmonypy==0.0.10 \
+    celltypist==1.6.2 \
+    && pip cache purge
+
+# Switch back to non-root user if one was defined
+USER nobody
+
+# Verify installations
+RUN python -c "import scanpy, anndata, scrublet, harmonypy, celltypist; \
+    print(f'scanpy: {scanpy.__version__}'); \
+    print(f'anndata: {anndata.__version__}'); \
+    print(f'scrublet: {scrublet.__version__}'); \
+    print(f'harmonypy: {harmonypy.__version__}'); \
+    print(f'celltypist: {celltypist.__version__}')"
+
+# Set working directory
+WORKDIR /data
+
+CMD ["/bin/bash"]

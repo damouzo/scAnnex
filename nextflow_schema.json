@@ -66,6 +66,54 @@
                     "default": 20,
                     "description": "Maximum mitochondrial percentage",
                     "fa_icon": "fas fa-percentage"
+                },
+                "use_quantile_filtering": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable quantile-based filtering for nFeatures and nCounts",
+                    "fa_icon": "fas fa-chart-bar"
+                },
+                "feature_quantile_low": {
+                    "type": "number",
+                    "default": 0.10,
+                    "description": "Lower quantile threshold for nFeatures (e.g., 0.10 = 10th percentile)",
+                    "fa_icon": "fas fa-chart-line"
+                },
+                "feature_quantile_high": {
+                    "type": "number",
+                    "default": 0.90,
+                    "description": "Upper quantile threshold for nFeatures (e.g., 0.90 = 90th percentile)",
+                    "fa_icon": "fas fa-chart-line"
+                },
+                "count_quantile_low": {
+                    "type": "number",
+                    "default": 0.10,
+                    "description": "Lower quantile threshold for nCounts (e.g., 0.10 = 10th percentile)",
+                    "fa_icon": "fas fa-chart-line"
+                },
+                "count_quantile_high": {
+                    "type": "number",
+                    "default": 0.90,
+                    "description": "Upper quantile threshold for nCounts (e.g., 0.90 = 90th percentile)",
+                    "fa_icon": "fas fa-chart-line"
+                },
+                "use_mad_thresholds": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use MAD-based automatic thresholds (alternative to quantile filtering)",
+                    "fa_icon": "fas fa-calculator"
+                },
+                "mad_multiplier": {
+                    "type": "number",
+                    "default": 5.0,
+                    "description": "MAD multiplier for threshold calculation",
+                    "fa_icon": "fas fa-times"
+                },
+                "save_attrition_log": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save detailed cell filtering attrition log",
+                    "fa_icon": "fas fa-file-alt"
                 }
             }
         },
@@ -85,6 +133,12 @@
                     "default": 0.05,
                     "description": "Expected doublet rate",
                     "fa_icon": "fas fa-calculator"
+                },
+                "doublet_removal": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Remove detected doublets from the dataset",
+                    "fa_icon": "fas fa-trash-alt"
                 }
             }
         },
@@ -105,6 +159,12 @@
                     "default": 10000,
                     "description": "Target sum for normalization",
                     "fa_icon": "fas fa-bullseye"
+                },
+                "n_top_genes": {
+                    "type": "integer",
+                    "default": 2000,
+                    "description": "Number of highly variable genes to identify",
+                    "fa_icon": "fas fa-dna"
                 }
             }
         },
@@ -130,6 +190,18 @@
                     "enum": ["harmony", "scanorama", "bbknn"],
                     "description": "Integration method",
                     "fa_icon": "fas fa-cogs"
+                },
+                "harmony_theta": {
+                    "type": "number",
+                    "default": 2.0,
+                    "description": "Harmony diversity clustering penalty parameter",
+                    "fa_icon": "fas fa-sliders-h"
+                },
+                "harmony_max_iter": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Maximum number of Harmony iterations",
+                    "fa_icon": "fas fa-repeat"
                 }
             }
         },
@@ -172,9 +244,15 @@
                 },
                 "clustering_resolutions": {
                     "type": "string",
-                    "default": "0.4,0.8,1.0",
+                    "default": "0.1,0.3,0.5,0.7,0.9",
                     "description": "Comma-separated list of clustering resolutions",
                     "fa_icon": "fas fa-sliders-h"
+                },
+                "default_clustering_resolution": {
+                    "type": "number",
+                    "default": 0.5,
+                    "description": "Default clustering resolution for visualization",
+                    "fa_icon": "fas fa-dot-circle"
                 }
             }
         },
@@ -193,6 +271,104 @@
                     "type": "string",
                     "description": "Path to marker gene list file",
                     "fa_icon": "fas fa-list"
+                },
+                "annotation_method": {
+                    "type": "string",
+                    "default": "celltypist",
+                    "enum": ["celltypist", "marker"],
+                    "description": "Annotation method to use",
+                    "fa_icon": "fas fa-dna"
+                },
+                "celltypist_model": {
+                    "type": "string",
+                    "default": "Immune_All_Low.pkl",
+                    "description": "CellTypist model to use for annotation",
+                    "fa_icon": "fas fa-brain"
+                },
+                "celltypist_majority_voting": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable majority voting for CellTypist predictions",
+                    "fa_icon": "fas fa-vote-yea"
+                }
+            }
+        },
+        "generic_options": {
+            "title": "Generic options",
+            "type": "object",
+            "fa_icon": "fas fa-cog",
+            "description": "Less common options for the pipeline, typically set in a config file.",
+            "properties": {
+                "publish_dir_mode": {
+                    "type": "string",
+                    "default": "copy",
+                    "description": "Method used to save pipeline results to output directory.",
+                    "fa_icon": "fas fa-copy",
+                    "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"]
+                },
+                "email": {
+                    "type": "string",
+                    "description": "Email address for completion summary.",
+                    "fa_icon": "fas fa-envelope",
+                    "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$"
+                },
+                "email_on_fail": {
+                    "type": "string",
+                    "description": "Email address for completion summary, only when pipeline fails.",
+                    "fa_icon": "fas fa-exclamation-triangle",
+                    "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$"
+                },
+                "max_multiqc_email_size": {
+                    "type": "string",
+                    "description": "File size limit when attaching MultiQC reports to summary emails.",
+                    "default": "25.MB",
+                    "fa_icon": "fas fa-file-upload"
+                },
+                "tracedir": {
+                    "type": "string",
+                    "description": "Directory to keep pipeline Nextflow logs and reports.",
+                    "default": "${params.outdir}/pipeline_info",
+                    "fa_icon": "fas fa-cogs"
+                },
+                "validate_params": {
+                    "type": "boolean",
+                    "description": "Boolean whether to validate parameters against the schema at runtime",
+                    "default": true,
+                    "fa_icon": "fas fa-check-square"
+                },
+                "version": {
+                    "type": "boolean",
+                    "description": "Display version and exit",
+                    "fa_icon": "fas fa-question",
+                    "default": false
+                },
+                "help": {
+                    "type": "boolean",
+                    "description": "Display help text",
+                    "fa_icon": "fas fa-question-circle",
+                    "default": false
+                },
+                "config_profile_name": {
+                    "type": "string",
+                    "description": "Institutional config name",
+                    "fa_icon": "fas fa-users-cog"
+                },
+                "config_profile_description": {
+                    "type": "string",
+                    "description": "Institutional config description",
+                    "fa_icon": "fas fa-users-cog"
+                },
+                "custom_config_version": {
+                    "type": "string",
+                    "description": "Git commit id for custom Institutional configs.",
+                    "default": "master",
+                    "fa_icon": "fas fa-users-cog"
+                },
+                "custom_config_base": {
+                    "type": "string",
+                    "description": "Base directory for custom Institutional configs.",
+                    "default": "https://raw.githubusercontent.com/nf-core/configs/master",
+                    "fa_icon": "fas fa-users-cog"
                 }
             }
         },
@@ -247,6 +423,9 @@
         },
         {
             "$ref": "#/definitions/annotation_options"
+        },
+        {
+            "$ref": "#/definitions/generic_options"
         },
         {
             "$ref": "#/definitions/max_job_request_options"

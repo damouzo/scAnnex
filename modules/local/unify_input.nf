@@ -2,7 +2,8 @@ process UNIFY_INPUT {
     tag "$meta.id"
     label 'process_low'
 
-    container "community.wave.seqera.io/library/scanpy_anndata:latest"
+    conda "${projectDir}/env/scanpy.yml"
+    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
 
     input:
     tuple val(meta), path(input_file)

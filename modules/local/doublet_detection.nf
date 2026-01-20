@@ -2,15 +2,17 @@ process DOUBLET_DETECTION {
     tag "$meta.id"
     label 'process_medium'
 
-    container "community.wave.seqera.io/library/scanpy_scrublet:latest"
+    conda "${projectDir}/env/scanpy.yml"
+    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
 
     input:
     tuple val(meta), path(h5ad)
 
     output:
     tuple val(meta), path("*_doublets.h5ad"), emit: h5ad
-    path "*.{png,pdf}"                       , emit: plots
+    path "*.png"                             , emit: plots
     path "doublet_scores.csv"                , emit: scores
+    path "doublet_attrition.json"            , emit: attrition, optional: true
     path "versions.yml"                      , emit: versions
 
     when:
@@ -19,11 +21,20 @@ process DOUBLET_DETECTION {
     script:
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
+    
+    // SLC: Build doublet detection parameters
+    def remove_doublets = params.doublet_removal ? '--remove-doublets' : ''
+    def save_attrition = params.save_attrition_log ? '--save-attrition-log' : ''
+    def doublet_rate = params.expected_doublet_rate ?: 0.05
+    
     """
     doublet_detection.py \\
         --input ${h5ad} \\
         --output ${prefix}_doublets.h5ad \\
         --scores doublet_scores.csv \\
+        --expected-doublet-rate ${doublet_rate} \\
+        ${remove_doublets} \\
+        ${save_attrition} \\
         ${args}
 
     cat <<-END_VERSIONS > versions.yml
@@ -40,6 +51,7 @@ process DOUBLET_DETECTION {
     touch doublet_histogram.png
     touch doublet_umap.png
     touch doublet_scores.csv
+    touch doublet_attrition.json
     touch versions.yml
     """
 }
