@@ -150,45 +150,91 @@ results/
 
 ## Interactive Dashboard
 
-The scAnnex dashboard provides a web-based interface for exploring analysis results.
+The scAnnex dashboard provides an interactive web-based interface for exploring single-cell RNA-seq analysis results. Built with R Shiny, it offers real-time data visualization with support for both small datasets and large-scale analyses (>100k cells).
 
-### Launch Dashboard
+### Features
+
+- **Data Input Tab**: Load H5AD files with automatic format detection and backed mode for large datasets
+- **QC Overview Tab**: Interactive quality control metrics with before/after filtering comparison
+- **Clustering & UMAP Tab**: 
+  - Interactive UMAP visualization with WebGL acceleration
+  - Color by cell types, QC metrics, or batch information
+  - Adjustable point size and opacity
+  - Cell metadata table with search and filtering
+- **Gene Expression Tab**: 
+  - Real-time gene expression visualization on UMAP
+  - Continuous color scales (Viridis)
+  - Expression value hover tooltips
+- **About Tab**: Pipeline version and configuration information
+
+### Quick Start
+
+#### Option 1: Conda Environment (Recommended - No sudo required)
 
 ```bash
 cd dashboard
-./run_dashboard.sh run
+./setup_dashboard.sh      # Auto-detects and sets up environment
+./launch_dashboard.sh     # Launches on http://localhost:8888
 ```
 
-Access at: **http://localhost:3838**
-
-### Dashboard Features
-
-- **Data Input Tab**: Load H5AD files and view dataset dimensions
-- **QC Overview Tab**: Inspect quality control metrics and filtering statistics
-- **Clustering & UMAP Tab**: Interactive UMAP visualization with metadata coloring
-- **Gene Expression Tab**: Search genes and visualize expression on UMAP
-- **About Tab**: Pipeline version and configuration information
-
-The dashboard uses backed H5AD reading for memory-efficient handling of large datasets (>100k cells).
-
-### Dashboard Commands
+#### Option 2: Docker
 
 ```bash
-# Start dashboard
-./run_dashboard.sh run
-
-# Stop dashboard
-./run_dashboard.sh stop
-
-# Rebuild Docker image (after code changes)
-./run_dashboard.sh build
-
-# View logs
-./run_dashboard.sh logs
-
-# Open shell in container
-./run_dashboard.sh shell
+cd dashboard
+docker build -t scannex-dashboard .
+docker run -p 3838:3838 -v $(pwd)/../results:/data scannex-dashboard
+# Access at: http://localhost:3838
 ```
+
+#### Option 3: HPC with Apptainer/Singularity
+
+```bash
+cd dashboard
+apptainer build scannex-dashboard.sif scannex-dashboard.def
+apptainer run --bind ./results:/data scannex-dashboard.sif
+```
+
+### Dashboard Usage
+
+1. **Load your data**: Enter the path to your `*_annotated.h5ad` file from pipeline results
+2. **Explore QC metrics**: View filtering statistics and quality control plots
+3. **Visualize clusters**: Interactive UMAP colored by cell types or metadata
+4. **Inspect gene expression**: Search for marker genes and view their expression patterns
+
+### Example Dataset
+
+The dashboard has been tested with the included PBMC dataset:
+- **935 cells** × **14,521 genes**
+- **6 cell types** annotated:
+  - Tcm/Naive helper T cells (36.6%)
+  - Classical monocytes (23.7%)
+  - Naive B cells (18.8%)
+  - MAIT cells (13.0%)
+  - CD16+ NK cells (5.6%)
+  - Non-classical monocytes (2.2%)
+
+### Memory Optimization
+
+The dashboard automatically detects file size and uses backed mode (memory-efficient reading) for large datasets:
+- **< 500 MB**: Full in-memory loading (fast, complete feature access)
+- **≥ 500 MB**: Backed mode (low memory, suitable for HPC)
+
+### Troubleshooting
+
+For detailed setup instructions and troubleshooting:
+- **Simple guide**: `dashboard/README_SIMPLE.md`
+- **Quick reference**: `dashboard/QUICKSTART.md`
+- **Manual setup**: `dashboard/MANUAL_LAUNCH.md`
+- **WSL2 issues**: `dashboard/TROUBLESHOOTING_WSL2.md`
+
+### Dashboard Requirements
+
+**Conda environment** (recommended):
+- R 4.3+
+- Python 3.10+ with anndata, scanpy
+- R packages: shiny, shinydashboard, plotly, DT, reticulate
+
+All dependencies are managed automatically by `setup_dashboard.sh`.
 
 ## Execution Profiles
 

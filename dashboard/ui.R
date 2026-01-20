@@ -101,7 +101,7 @@ ui <- dashboardPage(
                 textInput(
                   "input_h5ad_path",
                   "H5AD File Path:",
-                  value = "/srv/shiny-server/data/normalized_integrated.h5ad",
+                  value = "/home/damo/scAnnex/results_slc_first_run/auto/PBMC_TEST_annotated.h5ad",
                   width = "100%"
                 )
               ),
@@ -110,7 +110,7 @@ ui <- dashboardPage(
                 textInput(
                   "input_qc_dir",
                   "QC Results Directory:",
-                  value = "/srv/shiny-server/data/qc_results",
+                  value = "/home/damo/scAnnex/results_slc_first_run/qc",
                   width = "100%"
                 )
               )
@@ -119,7 +119,7 @@ ui <- dashboardPage(
             checkboxInput(
               "input_backed_mode",
               "Use backed mode (recommended for >50k cells)",
-              value = TRUE
+              value = FALSE
             ),
             
             actionButton(

@@ -68,6 +68,28 @@ temp/
 *.tmp
 *.bak
 
+# Results directories (keep structure, ignore large outputs)
+results_*/
+!results_*/.gitkeep
+
+# Dashboard
+dashboard/*.sif
+dashboard/launch_test.R
+dashboard/test_umap.R
+dashboard/update_paths.R
+
+# Conda environments
+*.tar.gz
+*.conda
+
+# Secrets and credentials (extra safety)
+*.pem
+*.key
+*.env
+.env.*
+credentials.json
+secrets.yaml
+
 # OS
 Thumbs.db
 .DS_Store

@@ -795,6 +795,10 @@ def main():
         # Load data
         logger.info("\nLoading data...")
         adata = sc.read_h5ad(args.input)
+        
+        # Make gene names unique if duplicates exist
+        adata.var_names_make_unique()
+        
         logger.info(f"  Loaded: {adata.n_obs} cells × {adata.n_vars} genes")
         
         # Calculate QC metrics
@@ -892,9 +896,9 @@ def main():
         
         if not args.skip_filtering:
             logger.info(f"Results:")
-            logger.info(f"  Cells: {filtering_stats['cells_before']} → {filtering_stats['cells_after']} "
+            logger.info(f"  Cells: {filtering_stats['cells_initial']} → {filtering_stats['cells_final']} "
                        f"({filtering_stats['cells_retained_pct']:.1f}% retained)")
-            logger.info(f"  Genes: {filtering_stats['genes_before']} → {filtering_stats['genes_after']} "
+            logger.info(f"  Genes: {filtering_stats['genes_initial']} → {filtering_stats['genes_final']} "
                        f"({filtering_stats['genes_retained_pct']:.1f}% retained)")
         
         logger.info(f"\nOutputs:")

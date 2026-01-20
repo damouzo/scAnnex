@@ -26,18 +26,14 @@ process QUALITY_CONTROL {
     // SLC: Build filtering arguments
     def filtering_method = ''
     if (params.use_quantile_filtering) {
-        filtering_method = """
-            --use-quantile-filtering \\
-            --feature-quantile-low ${params.feature_quantile_low} \\
-            --feature-quantile-high ${params.feature_quantile_high} \\
-            --count-quantile-low ${params.count_quantile_low} \\
-            --count-quantile-high ${params.count_quantile_high}
-        """
+        filtering_method = """--use-quantile-filtering \\
+        --feature-quantile-low ${params.feature_quantile_low} \\
+        --feature-quantile-high ${params.feature_quantile_high} \\
+        --count-quantile-low ${params.count_quantile_low} \\
+        --count-quantile-high ${params.count_quantile_high}"""
     } else if (params.use_mad_thresholds) {
-        filtering_method = """
-            --use-mad-thresholds \\
-            --mad-threshold ${params.mad_multiplier}
-        """
+        filtering_method = """--use-mad-thresholds \\
+        --mad-threshold ${params.mad_multiplier}"""
     }
     
     def attrition_log = params.save_attrition_log ? '--save-attrition-log' : ''

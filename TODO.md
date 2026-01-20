@@ -58,6 +58,13 @@
 - [x] SLC Quick Start guide (SLC_QUICKSTART.md)
 - [x] Complete implementation summary (docs/summary_2026-01-20.md)
 - [x] Workflow sync documentation (docs/workflow_sync_2026-01-20.md)
+- [x] Dashboard deployment guides:
+  - [x] Simple user guide (dashboard/README_SIMPLE.md)
+  - [x] Quick start guide (dashboard/QUICKSTART.md)
+  - [x] Manual launch instructions (dashboard/MANUAL_LAUNCH.md)
+  - [x] WSL2 troubleshooting (dashboard/TROUBLESHOOTING_WSL2.md)
+  - [x] GitHub Actions costs (dashboard/GITHUB_ACTIONS_COSTS.md)
+  - [x] Firewall configuration (dashboard/FIREWALL_FIX.md)
 
 ### Docker & Containers
 - [x] Scanpy extended container (Dockerfile.scanpy-extended)
@@ -73,16 +80,80 @@
 
 ---
 
-## 🚧 IN PROGRESS - Current Sprint
+## 🚧 IN PROGRESS - Current Sprint (January 20, 2026)
 
-### Pipeline Testing & Validation
-- [ ] **END-TO-END TEST:** Run complete pipeline on PBMC 1k dataset
-  - [ ] Download test data successfully
-  - [ ] Execute full workflow without errors
-  - [ ] Verify all outputs are generated
-  - [ ] Check Cell Attrition Log accuracy
-  - [ ] Validate multi-resolution clustering results
-  - [ ] Confirm CellTypist annotations are correct
+### Pipeline Testing & Validation ✅ COMPLETED
+- [x] **END-TO-END TEST:** Run complete pipeline on PBMC 935 cells dataset
+  - [x] Execute full workflow without errors
+  - [x] Verify all outputs are generated (results_slc_first_run/)
+  - [x] Cell types annotated: 6 types (Tcm/Naive helper T, Classical monocytes, Naive B, MAIT, CD16+ NK, Non-classical monocytes)
+  - [x] Validate multi-resolution clustering results (5 resolutions: 0.1-0.9)
+  - [x] Confirm CellTypist annotations are correct
+  - [x] H5AD file with complete metadata generated
+
+### Dashboard Development 🚧 IN PROGRESS
+**Status:** Core functionality complete, testing in progress
+
+- [x] **Infrastructure**
+  - [x] R Shiny dashboard structure (app.R, global.R, server.R, ui.R)
+  - [x] Conda environment setup (environment_dashboard.yml) - TESTED & WORKING
+  - [x] R-Python integration via reticulate (RETICULATE_PYTHON configuration)
+  - [x] Deployment scripts (setup_dashboard.sh, launch_dashboard.sh)
+  - [x] Container definitions (Dockerfile, Apptainer .def)
+  - [x] SLURM job template for HPC clusters
+  - [x] GitHub Actions CI/CD (release-only container builds)
+
+- [x] **Data Loading**
+  - [x] H5AD file loading with anndata
+  - [x] Backed mode support for large datasets
+  - [x] UMAP coordinates extraction (FIXED: handled backed mode issue)
+  - [x] Metadata extraction (cell types, QC metrics)
+  - [x] Gene expression extraction function
+  - [x] File size detection for auto-disabling backed mode (<500 MB)
+
+- [x] **Tab 1: Data Input**
+  - [x] File path inputs (H5AD, QC directory)
+  - [x] Backed mode toggle
+  - [x] Load button with progress indicator
+  - [x] Status display (cells, genes, backed mode)
+
+- [ ] **Tab 2: QC Overview** 🚧 TESTING NEEDED
+  - [x] InfoBoxes (cells before/after, genes, retention rate)
+  - [x] QC metrics table
+  - [x] Thresholds display
+  - [x] Before/after QC plot selectors
+  - [ ] Verify QC plots load correctly from results directory
+
+- [x] **Tab 3: Clustering & UMAP** ✅ FIXED
+  - [x] Interactive UMAP plot with plotly
+  - [x] Color by selector (cell types, QC metrics, batches)
+  - [x] Point size and opacity controls
+  - [x] Metadata table with filters
+  - [x] UMAP coordinates properly loaded (backed mode fix applied)
+
+- [x] **Tab 4: Gene Expression**
+  - [x] Gene search input
+  - [x] Gene expression UMAP visualization
+  - [x] Viridis color scale
+  - [x] Hover info with expression values
+
+- [ ] **Testing & Validation** 🚧 NEXT STEP
+  - [ ] Launch dashboard and test all tabs
+  - [ ] Test UMAP colored by predicted_labels (cell types)
+  - [ ] Test gene expression for marker genes (CD3D, CD14, CD79A)
+  - [ ] Verify QC plots loading
+  - [ ] Take screenshots for documentation
+
+- [ ] **Export Functionality**
+  - [ ] Plot export (PNG, PDF, SVG)
+  - [ ] Cell type table export (CSV)
+  - [ ] Filtered metadata export
+
+- [ ] **Enhancements**
+  - [ ] Cell type statistics summary box
+  - [ ] Gene search autocomplete
+  - [ ] Fixed color palette for cell types
+  - [ ] High-resolution plot options
 
 ### Integration Module Enhancements
 - [ ] Add diagnostic UMAPs (pre/post batch correction)

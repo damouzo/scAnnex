@@ -1,0 +1,2 @@
+sample_id,file_type,file_path,batch,condition
+PBMC_TEST,mtx,test_data/mtx/filtered_feature_bc_matrix,batch1,control

@@ -282,14 +282,15 @@ def multi_resolution_clustering(
             sc.tl.louvain(adata, resolution=res, key_added=f'louvain_{res}')
             n_clusters = len(adata.obs[f'louvain_{res}'].unique())
         
-        clustering_results[res] = n_clusters
+        # Convert float key to string for H5AD compatibility
+        clustering_results[str(res)] = n_clusters
         logger.info(f"  ✓ Resolution {res}: {n_clusters} clusters")
     
     # Set default clustering column
     default_key = f'{method}_{default_resolution}'
     if default_key in adata.obs.columns:
         adata.obs[method] = adata.obs[default_key].copy()
-        logger.info(f"\n✓ Default clustering set to {default_key} ({clustering_results[default_resolution]} clusters)")
+        logger.info(f"\n✓ Default clustering set to {default_key} ({clustering_results[str(default_resolution)]} clusters)")
     
     # Save clustering summary
     adata.uns['clustering_summary'] = {

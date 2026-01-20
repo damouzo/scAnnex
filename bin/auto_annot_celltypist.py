@@ -155,6 +155,17 @@ def load_data(h5ad_path, backed=False):
     print(f"  Shape: {adata.shape[0]} cells × {adata.shape[1]} genes")
     print(f"  Observations: {list(adata.obs.columns)}")
     
+    # CellTypist expects log1p normalized data in .X
+    # Check if normalized data is stored in layers (Scanpy best practice)
+    if 'log1p_norm' in adata.layers:
+        print(f"  Using log1p normalized data from .layers['log1p_norm'] for CellTypist")
+        adata.X = adata.layers['log1p_norm'].copy()
+    elif 'normalized' in adata.layers:
+        print(f"  Using normalized data from .layers['normalized'] for CellTypist")
+        adata.X = adata.layers['normalized'].copy()
+    else:
+        print(f"  WARNING: No log1p normalized data found in layers, using .X as-is")
+    
     return adata
 
 
@@ -193,12 +204,26 @@ def run_celltypist(adata, model, majority_voting=False,
     print("\nRunning CellTypist annotation...")
     
     try:
+        # For majority voting, use existing leiden clustering or compute it
+        over_clustering_key = None
+        if majority_voting:
+            # Check if leiden clustering exists at the specified resolution
+            leiden_key = f'leiden_{over_clustering_resolution}'
+            if leiden_key not in adata.obs.columns:
+                # Compute leiden clustering if it doesn't exist
+                print(f"  Computing leiden clustering at resolution {over_clustering_resolution} for majority voting...")
+                import scanpy as sc
+                sc.pp.neighbors(adata, use_rep='X_pca')
+                sc.tl.leiden(adata, resolution=over_clustering_resolution, key_added=leiden_key)
+            over_clustering_key = leiden_key
+            print(f"  Using {leiden_key} for majority voting")
+        
         # Run prediction
         predictions = celltypist.annotate(
             adata,
             model=model,
             majority_voting=majority_voting,
-            over_clustering=('leiden', over_clustering_resolution) if majority_voting else None,
+            over_clustering=over_clustering_key,
             min_prop=min_prop if majority_voting else 0
         )
         

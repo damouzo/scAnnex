@@ -1,23 +1,46 @@
 # scAnnex Dashboard - Global Settings and Functions
 # Loaded once when the app starts
 
+# ==============================================================================
+# Python Setup - MUST BE FIRST (before loading reticulate)
+# ==============================================================================
+
+# Configure Python path BEFORE loading reticulate library
+# This ensures we use the conda environment's Python with scanpy/anndata
+conda_prefix <- Sys.getenv("CONDA_PREFIX")
+if (conda_prefix != "") {
+  # We're in a conda environment, use its Python
+  python_path <- file.path(conda_prefix, "bin", "python3")
+  message(sprintf("Using Conda Python: %s", python_path))
+} else {
+  # Fallback to system Python (may not work without packages)
+  python_path <- "/usr/bin/python3"
+  warning("Not in Conda environment. Python packages may be missing.")
+}
+
+# CRITICAL: Set this BEFORE loading reticulate
+Sys.setenv(RETICULATE_PYTHON = python_path)
+
+# ==============================================================================
+# Load R Libraries
+# ==============================================================================
+
 library(shiny)
 library(shinydashboard)
 library(shinyWidgets)
 library(plotly)
 library(DT)
 library(ggplot2)
-library(reticulate)
+library(reticulate)  # Loaded AFTER setting RETICULATE_PYTHON
 library(viridis)
 library(data.table)
 library(jsonlite)
 
 # ==============================================================================
-# Python Setup for Reading H5AD Files
+# Finalize Python Configuration
 # ==============================================================================
 
-# Configure Python
-use_python("/usr/bin/python3", required = TRUE)
+use_python(python_path, required = TRUE)
 
 # Import required Python modules
 ad <- import("anndata")
@@ -38,10 +61,21 @@ load_h5ad_data <- function(h5ad_path, backed = TRUE) {
   
   message(sprintf("Loading H5AD file: %s", h5ad_path))
   
+  # For small datasets (<100k cells), disable backed mode to access .obsm
+  # Check file size first to make smart decision
+  file_size_mb <- file.info(h5ad_path)$size / (1024^2)
+  
+  if (backed && file_size_mb < 500) {
+    message(sprintf("  File size: %.1f MB - disabling backed mode for full .obsm access", file_size_mb))
+    backed <- FALSE
+  }
+  
   # Read H5AD with backed mode for large datasets
   if (backed) {
+    message("  Using backed mode (read-only, low memory)")
     adata <- ad$read_h5ad(h5ad_path, backed = "r")
   } else {
+    message("  Loading into memory (full access)")
     adata <- ad$read_h5ad(h5ad_path)
   }
   
@@ -51,14 +85,36 @@ load_h5ad_data <- function(h5ad_path, backed = TRUE) {
   
   # Extract UMAP coordinates if available
   umap_coords <- NULL
-  if ("X_umap" %in% names(adata$obsm)) {
-    umap_matrix <- py_to_r(adata$obsm["X_umap"])
+  
+  tryCatch({
+    message("  Checking for UMAP coordinates in .obsm['X_umap']...")
+    
+    # For backed mode, load UMAP separately since .obsm is not accessible
+    if (backed) {
+      message("  Backed mode detected - loading UMAP from separate read...")
+      adata_temp <- ad$read_h5ad(h5ad_path, backed = NULL)
+      umap_matrix <- py_to_r(adata_temp$obsm["X_umap"])
+    } else {
+      # Direct access for in-memory
+      umap_matrix <- py_to_r(adata$obsm["X_umap"])
+    }
+    
+    # Successfully got UMAP data
     umap_coords <- data.frame(
       cell_id = rownames(metadata),
       UMAP_1 = umap_matrix[, 1],
       UMAP_2 = umap_matrix[, 2]
     )
-  }
+    
+    message(sprintf("  ✓ UMAP coordinates loaded: %d cells", nrow(umap_coords)))
+    message(sprintf("  ✓ UMAP range: [%.2f, %.2f] to [%.2f, %.2f]",
+                    min(umap_coords$UMAP_1), max(umap_coords$UMAP_1),
+                    min(umap_coords$UMAP_2), max(umap_coords$UMAP_2)))
+    
+  }, error = function(e) {
+    message(sprintf("  WARNING: Could not load UMAP coordinates: %s", e$message))
+    message("  Plots requiring UMAP will not be available.")
+  })
   
   # Get variable genes info
   var_info <- py_to_r(adata$var)
