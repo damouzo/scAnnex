@@ -2,6 +2,46 @@
 
 Interactive R Shiny dashboard for visualizing scRNA-seq analysis results from the scAnnex pipeline.
 
+## 📚 Complete Documentation
+
+**For detailed setup instructions, troubleshooting, and usage guides, see:**
+
+👉 **[Complete Dashboard Documentation](../docs/dashboard/README.md)**
+
+### Quick Links
+- [Quick Start Guide](../docs/dashboard/QUICKSTART.md) - 5-minute setup
+- [Simple User Guide](../docs/dashboard/README_SIMPLE.md) - Step-by-step for beginners
+- [WSL2 Troubleshooting](../docs/dashboard/TROUBLESHOOTING_WSL2.md)
+- [Firewall Configuration](../docs/dashboard/FIREWALL_FIX.md)
+
+---
+
+## Quick Start
+
+### Option 1: Conda (Recommended - No sudo required)
+```bash
+cd dashboard
+./setup_dashboard.sh      # Auto-detects and sets up environment
+./launch_dashboard.sh     # Launches on http://localhost:8888
+```
+
+### Option 2: Docker
+```bash
+cd dashboard
+docker build -t scannex-dashboard .
+docker run -p 3838:3838 -v $(pwd)/../results:/data scannex-dashboard
+# Access at: http://localhost:3838
+```
+
+### Option 3: Apptainer/Singularity (HPC)
+```bash
+cd dashboard
+apptainer build scannex-dashboard.sif scannex-dashboard.def
+apptainer run --bind ./results:/data scannex-dashboard.sif
+```
+
+---
+
 ## Features
 
 ### Tab 1: Data Input
@@ -38,173 +78,145 @@ Interactive R Shiny dashboard for visualizing scRNA-seq analysis results from th
 - **DT**: Interactive data tables
 - **Python**: scanpy/anndata for H5AD reading
 
-## Docker Deployment (Recommended)
-
-### Build the Docker image:
-```bash
-cd dashboard
-docker build -t scannex-dashboard:latest .
-```
-
-### Run the dashboard:
-```bash
-# Basic run (uses default test data path)
-docker run -d -p 3838:3838 \
-  --name scannex-dashboard \
-  -v $(pwd)/../test_data/analytical_core_results:/srv/shiny-server/data \
-  scannex-dashboard:latest
-
-# Access at: http://localhost:3838
-```
-
-### With custom data directory:
-```bash
-docker run -d -p 3838:3838 \
-  --name scannex-dashboard \
-  -v /path/to/your/results:/srv/shiny-server/data \
-  scannex-dashboard:latest
-```
-
-### Stop the dashboard:
-```bash
-docker stop scannex-dashboard
-docker rm scannex-dashboard
-```
-
-## Local Development (if R + packages installed)
-
-### Install required R packages:
-```R
-install.packages(c(
-  "shiny",
-  "shinydashboard",
-  "shinyWidgets",
-  "reticulate",
-  "plotly",
-  "DT",
-  "ggplot2",
-  "viridis",
-  "data.table",
-  "jsonlite"
-))
-```
-
-### Install Python packages:
-```bash
-pip3 install scanpy anndata h5py numpy pandas
-```
-
-### Run locally:
-```bash
-R -e "shiny::runApp('dashboard', port=3838, host='0.0.0.0')"
-```
+---
 
 ## File Structure
 
 ```
 dashboard/
-├── Dockerfile              # Docker container definition
-├── app.R                   # Main Shiny app entry point
-├── global.R                # Global functions and data loading
-├── ui.R                    # User interface layout
-├── server.R                # Server logic and reactive functions
-├── modules/                # (Future) Modular Shiny components
-└── www/                    # Static assets (CSS, images)
+├── app.R                        # Main Shiny app entry point
+├── global.R                     # Global functions and data loading
+├── ui.R                         # User interface layout
+├── server.R                     # Server logic and reactive functions
+├── environment_dashboard.yml    # Conda environment specification
+├── Dockerfile                   # Docker container definition
+├── scannex-dashboard.def        # Apptainer container definition
+├── setup_dashboard.sh           # Auto-setup script
+├── launch_dashboard.sh          # Universal launcher
+└── launch_dashboard.slurm       # SLURM job template
 ```
+
+---
 
 ## Data Requirements
 
-The dashboard expects the following data structure:
+The dashboard expects H5AD files from the scAnnex pipeline with:
 
-```
-data/
-├── qc_filtered.h5ad        # QC-filtered H5AD file
-└── qc_results/             # QC results directory
-    ├── qc_report.json      # QC metrics and thresholds
-    ├── qc_before_*.png     # Pre-filtering plots
-    └── qc_after_*.png      # Post-filtering plots
-```
-
-## Performance Considerations
-
-### Backed Mode (>50k cells)
-The dashboard uses AnnData's backed mode for large datasets:
-- Metadata loaded into memory
-- Expression matrices stay on disk
-- Gene expression loaded on-demand
-
-### WebGL Acceleration
-UMAP plots use `scattergl` for hardware-accelerated rendering of large point clouds.
-
-### Recommended Limits
-- **Optimal**: <100k cells, interactive and fast
-- **Acceptable**: 100k-500k cells, use backed mode
-- **Large**: >500k cells, consider subsetting for visualization
-
-## Customization
-
-### Change default data path:
-Edit the `DEFAULT_DATA_PATH` variable in `global.R` or set environment variable:
-```bash
-docker run -d -p 3838:3838 \
-  -e SCANNEX_DATA_PATH=/custom/path \
-  -v /host/path:/custom/path \
-  scannex-dashboard:latest
+```python
+adata.obs['predicted_labels']    # Cell type annotations
+adata.obs['celltypist_score']    # Confidence scores
+adata.obsm['X_umap']              # UMAP coordinates
+adata.obsm['X_pca']               # PCA coordinates
+# QC metrics, clustering results, etc.
 ```
 
-### Add custom CSS:
-Place CSS files in `www/` directory and reference in `ui.R`.
+Example data path:
+```
+results/
+├── auto/
+│   └── SAMPLE_annotated.h5ad     # Main annotated dataset
+└── qc/
+    ├── qc_report.json            # QC metrics
+    └── plots/                     # QC visualization plots
+```
 
-### Add new tabs:
-1. Add `menuItem` in `ui.R` sidebar
-2. Add `tabItem` in `ui.R` body
-3. Add reactive logic in `server.R`
+---
+
+## Performance
+
+### Memory Usage by Dataset Size
+
+| Dataset Size | Mode | Memory | Load Time |
+|--------------|------|--------|-----------|
+| < 10k cells | In-memory | ~100-500 MB | 1-5 sec |
+| 10-50k cells | In-memory | ~500 MB - 2 GB | 5-15 sec |
+| 50-100k cells | Backed | ~100-200 MB | 10-30 sec |
+| > 100k cells | Backed | ~200-500 MB | 30-60 sec |
+
+The dashboard automatically optimizes memory based on file size (<500 MB = in-memory mode).
+
+---
+
+## Deployment Options Comparison
+
+| Method | Setup Time | Requires | Best For |
+|--------|------------|----------|----------|
+| **Conda** | 5 min | Conda/Mamba | Local development, no sudo |
+| **Docker** | 10 min | Docker | Production, web servers |
+| **Apptainer** | 15 min | Apptainer | HPC clusters |
+
+---
 
 ## Troubleshooting
 
-### Dashboard won't start
-- Check Docker logs: `docker logs scannex-dashboard`
-- Verify data directory is mounted correctly
-- Ensure H5AD file exists and is readable
+### Quick Fixes
 
-### Can't read H5AD file
-- Verify Python + scanpy are installed: `python3 -c "import scanpy; print(scanpy.__version__)"`
-- Check file permissions
-- Try loading in Python directly to test
+**Dashboard won't start:**
+```bash
+cd dashboard
+./setup_dashboard.sh   # Recreate environment
+./launch_dashboard.sh  # Try again
+```
 
-### Plots not showing
-- Check QC results directory contains PNG files
-- Verify file paths in Data Input tab
-- Check browser console for JavaScript errors
+**Data won't load:**
+```bash
+# Verify file structure
+python3 -c "import anndata; adata = anndata.read_h5ad('/path/to/file.h5ad'); print(adata.obsm.keys())"
+```
 
-### Slow performance
-- Enable backed mode for large datasets
-- Reduce UMAP point size and opacity
-- Consider subsetting data for visualization
+**UMAP plot blank:**
+- Disable backed mode for small files (<500 MB)
+- Check browser console (F12) for errors
+
+**For detailed troubleshooting:** See [Complete Documentation](../docs/dashboard/README.md)
+
+---
+
+## Development
+
+### Testing
+```bash
+# Test all functionality
+Rscript test_dashboard_full.R
+
+# Launch in development mode
+R -e "shiny::runApp('.', host='127.0.0.1', port=8888)"
+```
+
+### Adding Features
+1. **New plot:** Add function to `global.R`
+2. **New UI element:** Edit `ui.R`
+3. **New logic:** Edit `server.R`
+4. **Test:** Restart app
+
+---
 
 ## Production Deployment
 
-For production use with multiple users, consider:
-
-- **ShinyProxy**: Containerized per-user sessions
-- **Posit Connect**: Commercial Shiny server with authentication
-- **Nginx**: Reverse proxy for load balancing
-- **Resource limits**: Set Docker memory/CPU limits
+For production with multiple users:
+- **ShinyProxy**: Per-user containerized sessions
+- **Posit Connect**: Commercial with authentication  
+- **Nginx**: Reverse proxy + load balancing
 
 Example with resource limits:
 ```bash
 docker run -d -p 3838:3838 \
   --name scannex-dashboard \
-  --memory="4g" \
-  --cpus="2" \
+  --memory="4g" --cpus="2" \
   -v /data:/srv/shiny-server/data \
   scannex-dashboard:latest
 ```
 
-## License
+---
 
-See main scAnnex project LICENSE file.
+## Support
 
-## Contact
+- **Issues:** https://github.com/[username]/scAnnex/issues
+- **Documentation:** [docs/dashboard/](../docs/dashboard/)
+- **Email:** [Your contact]
 
-For issues and feature requests, see the main scAnnex repository.
+---
+
+**Version:** 1.0  
+**Last Updated:** January 20, 2026  
+**Status:** Production Ready
