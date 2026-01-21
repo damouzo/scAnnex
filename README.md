@@ -1,10 +1,16 @@
 <div align="center">
 
-<img src="docs/images/Logo.png" alt="scAnnex Logo" width="300"/>
+<table>
+<tr>
+<td width="300" align="center">
+<img src="docs/images/Logo.png" alt="scAnnex Logo" width="280"/>
+</td>
+<td align="center">
 
-# scAnnex
+## **scAnnex**
+<sub><span style="color:red">**Currently under active development**</span></sub>
 
-**Automated single-cell RNA-seq analysis.**  
+**Automated scRNA-seq analysis.**  
 From raw counts to insights.
 
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
@@ -17,6 +23,10 @@ From raw counts to insights.
 [Documentation](#documentation) •
 [Dashboard](#dashboard) •
 [Examples](#examples)
+
+</td>
+</tr>
+</table>
 
 </div>
 
@@ -77,7 +87,6 @@ cd dashboard
 bash launch_dashboard.sh ../results
 ```
 
-Access at: http://localhost:3838
 
 ---
 
@@ -265,20 +274,6 @@ nextflow run main.nf \
 
 ---
 
-## Requirements
-
-**Nextflow:** ≥23.04.0  
-**Container engine:** Docker, Singularity, or Podman  
-**Conda:** (optional) For non-containerized execution
-
-**Pipeline tested on:**
-- Ubuntu 18.04+
-- macOS 12+
-- WSL2 (Windows)
-- HPC clusters (SLURM, PBS)
-
----
-
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
@@ -290,12 +285,7 @@ MIT License. See [LICENSE](LICENSE) for details.
 If you use scAnnex in your research, please cite:
 
 ```
-scAnnex: Automated Nextflow pipeline for single-cell RNA-seq analysis
-https://github.com/damouzo/scAnnex
+scAnnex: Automated Nextflow pipeline for single-cell RNA-seq analysis. https://github.com/damouzo/scAnnex
 ```
 
 ---
-
-<div align="center">
-  <sub>Built with Nextflow • Powered by Scanpy</sub>
-</div>
