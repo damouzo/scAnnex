@@ -15,19 +15,21 @@ process LAUNCH_DASHBOARD {
     script:
     def port = params.dashboard_port ?: 3838
     def host = params.dashboard_host ?: 'localhost'
+    // Convert relative path to absolute path for dashboard
+    def results_path = params.outdir.startsWith('/') ? params.outdir : "${launchDir}/${params.outdir}"
     """
     # Save dashboard info
     cat > dashboard_info.txt << EOF
 Dashboard Configuration
 ======================
-Results Directory: ${params.outdir}
+Results Directory: ${results_path}
 Dashboard Port: ${port}
 Dashboard Host: ${host}
 Dashboard URL: http://${host}:${port}
 
 Launch Command:
   cd ${projectDir}/dashboard
-  bash launch_dashboard.sh ${params.outdir}
+  bash launch_dashboard.sh ${results_path}
 
 Or with R directly:
   cd ${projectDir}/dashboard
@@ -47,12 +49,12 @@ EOF
     echo "📊 Your interactive dashboard is ready to launch!"
     echo ""
     echo "📂 Results location:"
-    echo "   ${params.outdir}"
+    echo "   ${results_path}"
     echo ""
     echo "🚀 To launch the dashboard, run:"
     echo ""
     echo "   cd ${projectDir}/dashboard"
-    echo "   bash launch_dashboard.sh ${params.outdir}"
+    echo "   bash launch_dashboard.sh ${results_path}"
     echo ""
     echo "════════════════════════════════════════════════════════════════"
     echo "  🌐 Dashboard URL (after launch):"
@@ -62,7 +64,7 @@ EOF
     echo "💡 Tips:"
     echo "   - Click or copy the URL to open in your browser"
     echo "   - Use Ctrl+C to stop the dashboard"
-    echo "   - Dashboard info saved to: ${params.outdir}/dashboard_info.txt"
+    echo "   - Dashboard info saved to: ${results_path}/dashboard_info.txt"
     echo ""
     """
 

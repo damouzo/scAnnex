@@ -75,6 +75,16 @@ ui <- dashboardPage(
         .info-box-content { padding-top: 10px; padding-bottom: 10px; }
         .box-title { font-size: 18px; font-weight: bold; }
         .shiny-notification { position: fixed; top: 50%; right: 50%; }
+        
+        /* QC Plot images - fit within box with max height */
+        #qc_plot_before img, #qc_plot_after img {
+          max-width: 100%;
+          max-height: 500px;
+          width: auto;
+          height: auto;
+          display: block;
+          margin: 0 auto;
+        }
       "))
     ),
     
@@ -101,7 +111,7 @@ ui <- dashboardPage(
                 textInput(
                   "input_h5ad_path",
                   "H5AD File Path:",
-                  value = "/home/damo/scAnnex/results_slc_first_run/auto/PBMC_TEST_annotated.h5ad",
+                  value = DEFAULT_H5AD_FILE,
                   width = "100%"
                 )
               ),
@@ -110,7 +120,7 @@ ui <- dashboardPage(
                 textInput(
                   "input_qc_dir",
                   "QC Results Directory:",
-                  value = "/home/damo/scAnnex/results_slc_first_run/qc",
+                  value = DEFAULT_QC_DIR,
                   width = "100%"
                 )
               )
@@ -173,7 +183,7 @@ ui <- dashboardPage(
             collapsible = TRUE,
             collapsed = TRUE,
             
-            verbatimTextOutput("qc_thresholds_text")
+            DTOutput("qc_thresholds_table")
           )
         ),
         
@@ -192,7 +202,7 @@ ui <- dashboardPage(
               choices = c("Violin", "Scatter", "Distributions")
             ),
             
-            imageOutput("qc_plot_before", height = "500px")
+            imageOutput("qc_plot_before")
           ),
           
           box(
@@ -207,7 +217,7 @@ ui <- dashboardPage(
               choices = c("Violin", "Scatter", "Distributions")
             ),
             
-            imageOutput("qc_plot_after", height = "500px")
+            imageOutput("qc_plot_after")
           )
         )
       ),
@@ -287,45 +297,38 @@ ui <- dashboardPage(
         
         fluidRow(
           box(
-            title = "Gene Search",
+            title = "Gene Expression",
             status = "primary",
             solidHeader = TRUE,
-            width = 12,
+            width = 3,
             
-            p("Enter a gene name to visualize its expression on UMAP:"),
-            
-            fluidRow(
-              column(
-                width = 8,
-                textInput(
-                  "gene_search_input",
-                  "Gene Name:",
-                  placeholder = "e.g., CD3D, CD79A, MS4A1",
-                  width = "100%"
-                )
-              ),
-              column(
-                width = 4,
-                br(),
-                actionButton(
-                  "btn_plot_gene",
-                  "Plot Expression",
-                  icon = icon("chart-line"),
-                  class = "btn-primary"
-                )
-              )
+            textAreaInput(
+              "gene_input",
+              "Gene Name(s):",
+              placeholder = "Single gene: CD3D\n\nMultiple genes (one per line):\nCD3D\nCD3E\nCD8A\nCD8B",
+              rows = 8,
+              width = "100%"
             ),
             
-            verbatimTextOutput("gene_search_status")
-          )
-        ),
-        
-        fluidRow(
+            actionButton(
+              "btn_plot_genes",
+              "Plot Expression",
+              icon = icon("chart-line"),
+              class = "btn-primary btn-block"
+            ),
+            
+            br(),
+            
+            helpText(
+              "Enter a single gene name for expression, or multiple genes (one per line) for gene set scoring."
+            )
+          ),
+          
           box(
             title = "Gene Expression UMAP",
             status = "info",
             solidHeader = TRUE,
-            width = 12,
+            width = 9,
             
             plotlyOutput("gene_expression_umap", height = "600px")
           )
@@ -348,37 +351,57 @@ ui <- dashboardPage(
             width = 12,
             
             HTML("
-              <h3>scAnnex: Interactive Downstream Analysis for scRNA-seq</h3>
+              <h3>scAnnex Dashboard</h3>
               
               <p>
-                <strong>scAnnex</strong> is a production-ready Nextflow pipeline with an 
-                interactive Shiny dashboard for single-cell RNA-seq analysis.
+                Interactive visualization and exploration dashboard for single-cell RNA-seq data
+                processed through the <strong>scAnnex</strong> Nextflow pipeline.
               </p>
               
-              <h4>Key Features:</h4>
+              <h4>Dashboard Features:</h4>
               <ul>
-                <li><strong>Unified Input:</strong> Supports H5AD, RDS (Seurat), and MTX formats</li>
-                <li><strong>Quality Control:</strong> MAD-based automatic thresholding</li>
+                <li><strong>Quality Control Overview:</strong> Interactive QC metrics, thresholds tables, and before/after filtering plots</li>
+                <li><strong>UMAP Visualization:</strong> Interactive exploration with customizable coloring by metadata (batch, sample, condition, etc.)</li>
+                <li><strong>Gene Expression:</strong> Single gene expression visualization on UMAP</li>
+                <li><strong>Gene Set Scoring:</strong> Calculate and visualize gene signature scores (0-1 normalized scale)</li>
+                <li><strong>Metadata Export:</strong> Filter and download cell metadata as CSV or Excel</li>
+                <li><strong>Auto-Detection:</strong> Automatically finds H5AD and QC files in results directory</li>
+              </ul>
+              
+              <h4>Pipeline Features:</h4>
+              <ul>
+                <li><strong>Unified Input:</strong> H5AD, RDS (Seurat), and MTX formats</li>
+                <li><strong>Quality Control:</strong> MAD-based automatic thresholding with detailed attrition tracking</li>
+                <li><strong>Doublet Detection:</strong> Scrublet integration for doublet removal</li>
+                <li><strong>Normalization:</strong> Log-normalization and highly variable gene detection</li>
                 <li><strong>Batch Integration:</strong> Harmony-based batch correction</li>
-                <li><strong>Interactive Visualization:</strong> Real-time UMAP and gene expression plots</li>
-                <li><strong>Scalable:</strong> Backed H5AD mode for datasets >100k cells</li>
+                <li><strong>Dimensionality Reduction:</strong> PCA and UMAP generation</li>
+                <li><strong>Clustering:</strong> Leiden clustering with multiple resolutions</li>
+                <li><strong>Cell Type Annotation:</strong> Automated annotation using CellTypist</li>
               </ul>
               
-              <h4>Technology Stack:</h4>
+              <h4>Technology:</h4>
               <ul>
-                <li><strong>Pipeline:</strong> Nextflow + Python (Scanpy)</li>
-                <li><strong>Dashboard:</strong> R Shiny + reticulate</li>
-                <li><strong>Containerization:</strong> Docker / Apptainer</li>
+                <li><strong>Pipeline:</strong> Nextflow DSL2 + Python (Scanpy/AnnData)</li>
+                <li><strong>Dashboard:</strong> R Shiny + reticulate + plotly</li>
+                <li><strong>Execution:</strong> Conda environments or containerization (Docker/Apptainer)</li>
               </ul>
               
-              <h4>Documentation:</h4>
+              <h4>Documentation & Source Code:</h4>
               <p>
-                For full documentation, see <code>InitProject.md</code> in the project repository.
+                <a href='https://github.com/damouzo/scAnnex' target='_blank' style='font-size: 16px;'>
+                  <i class='fa fa-github'></i> GitHub Repository: damouzo/scAnnex
+                </a>
+              </p>
+              <p>
+                Visit the repository for complete documentation, installation instructions, usage examples, and the latest updates.
               </p>
               
               <hr>
               
-              <p><em>Version: 0.1.0 (Phase 8 - Dashboard Implementation)</em></p>
+              <p style='color: #666;'>
+                <em>Dashboard Version: 1.0.0 | Pipeline: scAnnex Nextflow</em>
+              </p>
             ")
           )
         )

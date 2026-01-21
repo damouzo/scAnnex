@@ -122,7 +122,7 @@ server <- function(input, output, session) {
   output$qc_box_cells_before <- renderInfoBox({
     req(rv$qc_report)
     
-    n_cells <- rv$qc_report$filtering_statistics$cells_before
+    n_cells <- rv$qc_report$filtering_statistics$cells_initial
     
     infoBox(
       "Cells (Before QC)",
@@ -135,7 +135,7 @@ server <- function(input, output, session) {
   output$qc_box_cells_after <- renderInfoBox({
     req(rv$qc_report)
     
-    n_cells <- rv$qc_report$filtering_statistics$cells_after
+    n_cells <- rv$qc_report$filtering_statistics$cells_final
     
     infoBox(
       "Cells (After QC)",
@@ -148,7 +148,7 @@ server <- function(input, output, session) {
   output$qc_box_genes_after <- renderInfoBox({
     req(rv$qc_report)
     
-    n_genes <- rv$qc_report$filtering_statistics$genes_after
+    n_genes <- rv$qc_report$filtering_statistics$genes_final
     
     infoBox(
       "Genes (After QC)",
@@ -224,28 +224,80 @@ server <- function(input, output, session) {
     )
   })
   
-  # QC Thresholds Text
-  output$qc_thresholds_text <- renderText({
+  # QC Thresholds Table
+  output$qc_thresholds_table <- renderDT({
     req(rv$qc_report)
     
     thresholds <- rv$qc_report$thresholds_applied
     
     if (is.character(thresholds) && thresholds == "manual") {
-      return("Manual thresholds were used (not MAD-based)")
-    }
-    
-    # Format thresholds
-    threshold_lines <- c("MAD-based automatic thresholds:\n")
-    
-    for (metric in names(thresholds)) {
-      vals <- thresholds[[metric]]
-      threshold_lines <- c(
-        threshold_lines,
-        sprintf("  %s: [%.1f, %.1f]", metric, vals[1], vals[2])
+      # Return simple message for manual thresholds
+      threshold_df <- data.frame(
+        Metric = "Manual thresholds",
+        `Lower Bound` = "-",
+        `Upper Bound` = "-",
+        check.names = FALSE
       )
+    } else {
+      # Build table from thresholds
+      metric_names <- c(
+        "n_genes_by_counts" = "Genes per cell",
+        "total_counts" = "UMI counts",
+        "pct_counts_mt" = "% Mitochondrial",
+        "pct_counts_ribo" = "% Ribosomal",
+        "pct_counts_hb" = "% Hemoglobin"
+      )
+      
+      threshold_list <- list()
+      
+      for (metric in names(thresholds)) {
+        vals <- thresholds[[metric]]
+        
+        # Format lower bound
+        lower <- if (!is.null(vals[1]) && !is.na(vals[1])) {
+          sprintf("%.1f", vals[1])
+        } else {
+          "No limit"
+        }
+        
+        # Format upper bound
+        upper <- if (length(vals) > 1 && !is.null(vals[2]) && !is.na(vals[2])) {
+          sprintf("%.1f", vals[2])
+        } else {
+          "No limit"
+        }
+        
+        # Use friendly name or fallback to metric name
+        metric_display <- if (metric %in% names(metric_names)) {
+          metric_names[[metric]]
+        } else {
+          metric
+        }
+        
+        threshold_list[[length(threshold_list) + 1]] <- data.frame(
+          Metric = metric_display,
+          `Lower Bound` = lower,
+          `Upper Bound` = upper,
+          check.names = FALSE,
+          stringsAsFactors = FALSE
+        )
+      }
+      
+      threshold_df <- do.call(rbind, threshold_list)
     }
     
-    paste(threshold_lines, collapse = "\n")
+    datatable(
+      threshold_df,
+      options = list(
+        dom = 't',
+        pageLength = 10,
+        ordering = FALSE,
+        columnDefs = list(
+          list(className = 'dt-center', targets = c(1, 2))
+        )
+      ),
+      rownames = FALSE
+    )
   })
   
   # QC Plot Before
@@ -342,12 +394,41 @@ server <- function(input, output, session) {
   output$metadata_table <- renderDT({
     req(rv$data_loaded)
     
+    # Reorder columns to put cell_id first
+    metadata <- rv$data_obj$metadata
+    
+    # Get cell_id column and other columns
+    if ("cell_id" %in% names(metadata)) {
+      other_cols <- setdiff(names(metadata), "cell_id")
+      metadata <- metadata[, c("cell_id", other_cols), drop = FALSE]
+    }
+    
     datatable(
-      rv$data_obj$metadata,
+      metadata,
+      extensions = 'Buttons',
       options = list(
         pageLength = 25,
         scrollX = TRUE,
         search = list(search = ''),
+        dom = 'Bfrtip',
+        buttons = list(
+          list(
+            extend = 'csv',
+            text = 'Download CSV',
+            filename = 'cell_metadata',
+            exportOptions = list(
+              modifier = list(page = "all", search = "applied")
+            )
+          ),
+          list(
+            extend = 'excel',
+            text = 'Download Excel',
+            filename = 'cell_metadata',
+            exportOptions = list(
+              modifier = list(page = "all", search = "applied")
+            )
+          )
+        ),
         columnDefs = list(
           list(className = 'dt-center', targets = '_all')
         )
@@ -361,66 +442,132 @@ server <- function(input, output, session) {
   # TAB 4: GENE EXPRESSION
   # ===========================================================================
   
-  # Gene expression status
-  output$gene_search_status <- renderText({
-    "Enter a gene name and click 'Plot Expression' to visualize."
-  })
-  
-  # Gene expression UMAP (placeholder for now)
+  # Gene expression UMAP - auto-detects single gene vs gene set
   output$gene_expression_umap <- renderPlotly({
-    req(input$btn_plot_gene)
+    req(input$btn_plot_genes)
     
     isolate({
-      req(input$gene_search_input)
+      req(input$gene_input)
       req(rv$data_loaded)
       req(rv$data_obj$umap_coords)
       
-      gene_name <- trimws(input$gene_search_input)
+      # Parse input (split by newlines and clean)
+      gene_list <- trimws(strsplit(input$gene_input, "\n")[[1]])
+      gene_list <- gene_list[gene_list != ""]
       
-      tryCatch({
-        
-        # Get gene expression
-        expr <- get_gene_expression(rv$data_obj, gene_name)
-        
-        # Merge with UMAP coords
-        umap_data <- rv$data_obj$umap_coords
-        umap_data$expression <- expr[umap_data$cell_id]
-        
-        # Create plot
-        p <- plot_ly(
-          data = umap_data,
-          x = ~UMAP_1,
-          y = ~UMAP_2,
-          type = 'scattergl',
-          mode = 'markers',
-          marker = list(
-            size = 3,
-            opacity = 0.7,
-            color = ~expression,
-            colorscale = 'Viridis',
-            showscale = TRUE,
-            colorbar = list(title = "Expression")
-          ),
-          text = ~paste("Cell:", cell_id, "<br>Expression:", round(expression, 2)),
-          hoverinfo = 'text'
-        ) %>%
-          layout(
-            title = sprintf("Expression of %s", gene_name),
-            xaxis = list(title = "UMAP 1"),
-            yaxis = list(title = "UMAP 2"),
-            hovermode = 'closest'
-          )
-        
-        return(p)
-        
-      }, error = function(e) {
+      if (length(gene_list) == 0) {
         showNotification(
-          paste("Error plotting gene:", e$message),
-          type = "error",
+          "Please enter at least one gene name",
+          type = "warning",
           duration = 5
         )
         return(NULL)
-      })
+      }
+      
+      # Auto-detect: single gene vs gene set
+      if (length(gene_list) == 1) {
+        # ===== SINGLE GENE EXPRESSION =====
+        gene_name <- gene_list[1]
+        
+        tryCatch({
+          
+          # Get gene expression
+          expr <- get_gene_expression(rv$data_obj, gene_name)
+          
+          # Merge with UMAP coords
+          umap_data <- rv$data_obj$umap_coords
+          umap_data$expression <- expr[umap_data$cell_id]
+          
+          # Create plot
+          p <- plot_ly(
+            data = umap_data,
+            x = ~UMAP_1,
+            y = ~UMAP_2,
+            type = 'scattergl',
+            mode = 'markers',
+            marker = list(
+              size = 3,
+              opacity = 0.7,
+              color = ~expression,
+              colorscale = 'Viridis',
+              showscale = TRUE,
+              colorbar = list(title = "Expression")
+            ),
+            text = ~paste("Cell:", cell_id, "<br>Expression:", round(expression, 2)),
+            hoverinfo = 'text'
+          ) %>%
+            layout(
+              title = sprintf("Expression of %s", gene_name),
+              xaxis = list(title = "UMAP 1"),
+              yaxis = list(title = "UMAP 2"),
+              hovermode = 'closest'
+            )
+          
+          return(p)
+          
+        }, error = function(e) {
+          showNotification(
+            paste("Error plotting gene:", e$message),
+            type = "error",
+            duration = 5
+          )
+          return(NULL)
+        })
+        
+      } else {
+        # ===== GENE SET SCORING =====
+        
+        tryCatch({
+          
+          # Calculate gene set score
+          score <- calculate_gene_set_score(rv$data_obj, gene_list)
+          
+          # Merge with UMAP coords
+          umap_data <- rv$data_obj$umap_coords
+          umap_data$score <- score[umap_data$cell_id]
+          
+          # Create plot
+          p <- plot_ly(
+            data = umap_data,
+            x = ~UMAP_1,
+            y = ~UMAP_2,
+            type = 'scattergl',
+            mode = 'markers',
+            marker = list(
+              size = 3,
+              opacity = 0.7,
+              color = ~score,
+              colorscale = 'Viridis',
+              showscale = TRUE,
+              colorbar = list(title = "Gene Set Score")
+            ),
+            text = ~paste("Cell:", cell_id, "<br>Score:", round(score, 3)),
+            hoverinfo = 'text'
+          ) %>%
+            layout(
+              title = sprintf("Gene Set Score (%d genes)", length(gene_list)),
+              xaxis = list(title = "UMAP 1"),
+              yaxis = list(title = "UMAP 2"),
+              hovermode = 'closest'
+            )
+          
+          showNotification(
+            sprintf("Gene set score calculated for %d genes", length(gene_list)),
+            type = "message",
+            duration = 3
+          )
+          
+          return(p)
+          
+        }, error = function(e) {
+          showNotification(
+            paste("Error calculating gene set score:", e$message),
+            type = "error",
+            duration = 5
+          )
+          return(NULL)
+        })
+      }
     })
   })
   

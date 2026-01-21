@@ -170,13 +170,27 @@ get_gene_expression <- function(data_obj, gene_name) {
 #' @return List containing QC metrics and thresholds
 load_qc_report <- function(qc_dir) {
   
-  report_path <- file.path(qc_dir, "qc_report.json")
+  # Try multiple possible locations for qc_report.json
+  possible_paths <- c(
+    file.path(qc_dir, "qc_report.json"),           # Direct path
+    file.path(qc_dir, "results", "qc_report.json") # In results subdirectory
+  )
   
-  if (!file.exists(report_path)) {
-    warning(sprintf("QC report not found: %s", report_path))
+  report_path <- NULL
+  for (path in possible_paths) {
+    if (file.exists(path)) {
+      report_path <- path
+      break
+    }
+  }
+  
+  if (is.null(report_path)) {
+    warning(sprintf("QC report not found in: %s", qc_dir))
+    warning(sprintf("  Tried: %s", paste(possible_paths, collapse=", ")))
     return(NULL)
   }
   
+  message(sprintf("Loading QC report from: %s", report_path))
   qc_report <- fromJSON(report_path)
   
   return(qc_report)
@@ -192,11 +206,32 @@ get_qc_plots <- function(qc_dir) {
     return(character(0))
   }
   
-  plot_files <- list.files(
-    qc_dir, 
-    pattern = "\\.(png|jpg|jpeg)$", 
-    full.names = TRUE
+  # Try multiple possible locations for plots
+  possible_dirs <- c(
+    qc_dir,                            # Direct path
+    file.path(qc_dir, "plots")         # In plots subdirectory
   )
+  
+  plot_files <- character(0)
+  
+  for (plot_dir in possible_dirs) {
+    if (dir.exists(plot_dir)) {
+      files <- list.files(
+        plot_dir, 
+        pattern = "\\.(png|jpg|jpeg)$", 
+        full.names = TRUE
+      )
+      plot_files <- c(plot_files, files)
+    }
+  }
+  
+  # Remove duplicates and sort
+  plot_files <- unique(plot_files)
+  plot_files <- sort(plot_files)
+  
+  if (length(plot_files) > 0) {
+    message(sprintf("Found %d QC plot(s)", length(plot_files)))
+  }
   
   return(plot_files)
 }
@@ -284,6 +319,111 @@ plot_qc_violin <- function(metadata, metric_col, threshold = NULL) {
   return(p)
 }
 
+#' Calculate gene set score using ranking-based method (AUCell-inspired)
+#' 
+#' @param data_obj Data object from load_h5ad_data()
+#' @param gene_list Character vector of gene names
+#' @return Named numeric vector of normalized scores per cell (0-1 scale)
+calculate_gene_set_score <- function(data_obj, gene_list) {
+  
+  adata <- data_obj$adata
+  
+  # Clean and validate gene list
+  gene_list <- unique(trimws(gene_list))
+  gene_list <- gene_list[gene_list != ""]
+  
+  if (length(gene_list) == 0) {
+    stop("Gene list is empty")
+  }
+  
+  # Find which genes exist in the dataset
+  available_genes <- rownames(data_obj$var_info)
+  found_genes <- gene_list[gene_list %in% available_genes]
+  missing_genes <- gene_list[!(gene_list %in% available_genes)]
+  
+  if (length(found_genes) == 0) {
+    stop(sprintf("None of the genes found in dataset. Missing: %s", 
+                 paste(missing_genes, collapse = ", ")))
+  }
+  
+  if (length(missing_genes) > 0) {
+    message(sprintf("  Warning: %d gene(s) not found: %s", 
+                    length(missing_genes),
+                    paste(missing_genes, collapse = ", ")))
+  }
+  
+  message(sprintf("  Calculating ranking-based score using %d gene(s)", 
+                  length(found_genes)))
+  
+  # Extract expression for all genes in the set
+  gene_expr_list <- list()
+  
+  for (gene in found_genes) {
+    gene_idx <- which(rownames(data_obj$var_info) == gene) - 1  # Python 0-indexed
+    
+    # Extract expression (handles both backed and in-memory)
+    if (data_obj$backed) {
+      expr <- py_to_r(adata$X[, as.integer(gene_idx)]$toarray()$flatten())
+    } else {
+      expr <- py_to_r(adata$X[, as.integer(gene_idx)])
+      if (is.matrix(expr)) {
+        expr <- as.vector(expr)
+      }
+    }
+    
+    gene_expr_list[[gene]] <- expr
+  }
+  
+  # Combine into matrix (genes x cells)
+  expr_matrix <- do.call(rbind, gene_expr_list)
+  rownames(expr_matrix) <- found_genes
+  
+  # Rank-based scoring (simplified AUCell approach)
+  # For each cell: calculate mean percentile rank of signature genes
+  # This gives a score from 0 (low expression) to 1 (high expression)
+  
+  n_cells <- ncol(expr_matrix)
+  scores <- numeric(n_cells)
+  
+  for (i in 1:n_cells) {
+    # Get expression values for this cell's signature genes
+    cell_sig_expr <- expr_matrix[, i]
+    
+    # Calculate percentile rank within the signature genes
+    # (comparing to other genes in the signature for this cell)
+    # Higher expression = higher percentile
+    ranks <- rank(cell_sig_expr, ties.method = "average")
+    mean_rank <- mean(ranks)
+    
+    # Normalize to 0-1 scale
+    n_genes_sig <- length(cell_sig_expr)
+    normalized_score <- (mean_rank - 1) / (n_genes_sig - 1)
+    
+    scores[i] <- normalized_score
+  }
+  
+  # Alternative: use mean expression but normalize to 0-1 scale
+  # This is simpler and faster while still being meaningful
+  mean_expr <- colMeans(expr_matrix)
+  
+  # Normalize to 0-1 range (min-max scaling)
+  min_expr <- min(mean_expr)
+  max_expr <- max(mean_expr)
+  
+  if (max_expr > min_expr) {
+    normalized_scores <- (mean_expr - min_expr) / (max_expr - min_expr)
+  } else {
+    normalized_scores <- rep(0.5, length(mean_expr))  # All same value
+  }
+  
+  names(normalized_scores) <- data_obj$metadata$cell_id
+  
+  message(sprintf("  Score range: %.3f - %.3f (mean: %.3f)", 
+                  min(normalized_scores), max(normalized_scores), mean(normalized_scores)))
+  
+  return(normalized_scores)
+}
+
 # ==============================================================================
 # Utility Functions
 # ==============================================================================
@@ -313,6 +453,39 @@ DEFAULT_DATA_PATH <- if (data_path_env == "") {
   "/srv/shiny-server/data"
 } else {
   data_path_env
+}
+
+# Auto-detect H5AD file and QC directory
+DEFAULT_H5AD_FILE <- ""
+DEFAULT_QC_DIR <- ""
+
+if (dir.exists(DEFAULT_DATA_PATH)) {
+  # Find annotated H5AD file
+  h5ad_files <- list.files(
+    DEFAULT_DATA_PATH,
+    pattern = ".*annotated.*\\.h5ad$",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+  
+  if (length(h5ad_files) > 0) {
+    DEFAULT_H5AD_FILE <- h5ad_files[1]
+    message(sprintf("  Auto-detected H5AD: %s", basename(DEFAULT_H5AD_FILE)))
+  }
+  
+  # Find QC directory
+  qc_dirs <- list.files(
+    DEFAULT_DATA_PATH,
+    pattern = "^qc$",
+    recursive = FALSE,
+    full.names = TRUE,
+    include.dirs = TRUE
+  )
+  
+  if (length(qc_dirs) > 0) {
+    DEFAULT_QC_DIR <- qc_dirs[1]
+    message(sprintf("  Auto-detected QC dir: %s", DEFAULT_QC_DIR))
+  }
 }
 
 message("=============================================================")

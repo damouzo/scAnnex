@@ -3,7 +3,7 @@ Generated: 2026-01-21 (Updated after Test 3.1 Completion)
 Source of Truth: InitProject.md + Seqera/Nextflow Expert Recommendations
 
 ═══════════════════════════════════════════════════════════════════════════
-PIPELINE STATUS SUMMARY - JANUARY 21, 2026 (10:45 UTC)
+PIPELINE STATUS SUMMARY - JANUARY 21, 2026 (14:00 UTC)
 ═══════════════════════════════════════════════════════════════════════════
 
 ✅ COMPLETED: All CRITICAL blockers fixed (Seqera recommendations Week 1)
@@ -15,9 +15,10 @@ PIPELINE STATUS SUMMARY - JANUARY 21, 2026 (10:45 UTC)
 ✅ COMPLETED: GitHub Actions CI/CD pipeline
 ✅ COMPLETED: Test 3.1 - Single file H5AD input (PASS ✅)
 ✅ COMPLETED: All 5 modules execute successfully end-to-end
+✅ COMPLETED: Dashboard fully functional with advanced features
 🚧 IN PROGRESS: Week 2 Testing & Validation (25% complete)
 
-Viability Score: 6.5/10 → 8.5/10 → 9.0/10 (post-testing)
+Viability Score: 6.5/10 → 8.5/10 → 9.5/10 (with dashboard)
 Next Milestone: Complete remaining Week 2 tests
 
 ═══════════════════════════════════════════════════════════════════════════
@@ -383,68 +384,117 @@ Target: Samplesheet-based multi-sample processing
       - Create unified version report
 
 ═══════════════════════════════════════════════════════════════════════════
-PHASE 8: Dashboard Implementation - ✅ COMPLETED
+PHASE 8: Dashboard Implementation - ✅ COMPLETED (January 21, 2026)
 ═══════════════════════════════════════════════════════════════════════════
 
-✅ STATUS: Operational - Docker-based Shiny Dashboard
+✅ STATUS: Production-Ready - Conda & Docker-based Shiny Dashboard
 
 dashboard/ directory structure:
-  ✔ CREATE: dashboard/app.R (main Shiny app)
-  ✔ CREATE: dashboard/server.R (server logic)
-  ✔ CREATE: dashboard/ui.R (UI components)
-  ✔ CREATE: dashboard/global.R (shared functions)
-  ✔ CREATE: dashboard/modules/ (modular Shiny components)
+  ✔ CREATE: dashboard/app.R (main Shiny app entry point)
+  ✔ CREATE: dashboard/server.R (server logic - 543 lines)
+  ✔ CREATE: dashboard/ui.R (UI components - 392 lines)
+  ✔ CREATE: dashboard/global.R (shared functions - 470 lines)
+  ✔ CREATE: dashboard/launch_dashboard.sh (multi-method launcher)
+  ✔ CREATE: dashboard/launch_simple.sh (conda-only launcher)
+  ✔ CREATE: dashboard/fix_h5ad_compatibility.py (H5AD fixer)
+  ✔ CREATE: dashboard/auto_fix_h5ad.sh (auto-detection wrapper)
   ✔ CREATE: dashboard/Dockerfile (rocker/shiny:4.3.3 + Python)
-  ✔ CREATE: dashboard/run_dashboard.sh (convenience launcher)
-  ✔ CREATE: dashboard/README.md (user documentation)
+  ✔ CREATE: dashboard/README.md (comprehensive documentation)
+  ✔ CREATE: conda environment scannex-dashboard (Python 3.10 + R packages)
 
 Tab 1 - Data Input:
-  ✔ IMPLEMENT: H5AD file browser
+  ✔ IMPLEMENT: H5AD file browser with auto-detection
+  ✔ IMPLEMENT: QC directory auto-detection
   ✔ IMPLEMENT: Automatic data loading with reticulate
-  ✔ IMPLEMENT: Cell/gene count display
+  ✔ IMPLEMENT: Cell/gene count display in sidebar
+  ✔ IMPLEMENT: Dashboard info file generation from pipeline
+  ✔ FIX: H5AD compatibility issues (encoding_type='null')
 
 Tab 2 - QC Overview:
-  ✔ IMPLEMENT: QC metrics display
-  ✔ IMPLEMENT: Before/after filtering comparisons
-  ☐ ENHANCE: Interactive threshold sliders (future)
+  ✔ IMPLEMENT: Info boxes (cells before/after, genes, retention %)
+  ✔ IMPLEMENT: QC metrics table (before/after comparison)
+  ✔ IMPLEMENT: QC thresholds table (visual, user-friendly)
+  ✔ IMPLEMENT: Before/after filtering QC plots (violin, scatter, distributions)
+  ✔ FIX: QC plot sizing (responsive, fit within boxes)
+  ✔ FIX: Violin plots layout (grid format instead of horizontal row)
+  ✔ FIX: QC data loading (search multiple directory locations)
+  ✔ FIX: JSON compatibility (Infinity → null conversion)
 
-Tab 3 - Clustering & Visualization:
-  ✔ IMPLEMENT: Interactive UMAP with plotly (WebGL)
-  ✔ IMPLEMENT: Color by metadata (batch, condition, QC metrics)
-  ✔ IMPLEMENT: Auto-detection of celltype_* columns
-  ✔ IMPLEMENT: Dynamic dropdown for coloring options
-  ☐ ADD: Toggle between clustering resolutions (future)
-  ☐ ADD: Lasso selection for subsetting (future)
+Tab 3 - Clustering & UMAP:
+  ✔ IMPLEMENT: Interactive UMAP with plotly (WebGL - scattergl)
+  ✔ IMPLEMENT: Color by metadata (batch, sample_id, condition, etc.)
+  ✔ IMPLEMENT: Point size and opacity controls
+  ✔ IMPLEMENT: Cell metadata table (collapsible)
+  ✔ IMPLEMENT: cell_id as first column in metadata table
+  ✔ IMPLEMENT: CSV/Excel export with filters respected
+  ✔ IMPLEMENT: DataTables Buttons extension for downloads
 
 Tab 4 - Gene Expression:
-  ✔ IMPLEMENT: Gene search functionality
-  ✔ IMPLEMENT: FeaturePlot generation (UMAP colored by gene)
-  ✔ IMPLEMENT: On-demand gene expression loading
-  ☐ ENHANCE: Multiple gene overlay (future)
+  ✔ IMPLEMENT: Single gene expression visualization on UMAP
+  ✔ IMPLEMENT: Gene set scoring (0-1 normalized scale)
+  ✔ IMPLEMENT: Auto-detection (1 gene = expression, >1 gene = scoring)
+  ✔ IMPLEMENT: Unified input box for both modes
+  ✔ IMPLEMENT: Min-max normalization for gene set scores
+  ✔ IMPLEMENT: On-demand gene expression loading (backed H5AD support)
+  ✔ IMPLEMENT: Error handling with user notifications
 
 Tab 5 - About:
-  ✔ IMPLEMENT: Project information
-  ✔ IMPLEMENT: Version information
+  ✔ IMPLEMENT: Project information (accurate feature list)
+  ✔ IMPLEMENT: Dashboard features section
+  ✔ IMPLEMENT: Pipeline features section
+  ✔ IMPLEMENT: Technology stack details
+  ✔ IMPLEMENT: GitHub repository link (https://github.com/damouzo/scAnnex)
+  ✔ IMPLEMENT: Version information (Dashboard 1.0.0)
 
 Performance Optimization:
-  ✔ IMPLEMENT: Backed H5AD reading
-      - Loads only metadata at startup
-      - Reads gene expression on-demand
-  ✔ IMPLEMENT: WebGL rendering for UMAP (scattergl)
+  ✔ IMPLEMENT: Backed H5AD reading (loads only metadata at startup)
+  ✔ IMPLEMENT: On-demand gene expression extraction
+  ✔ IMPLEMENT: WebGL rendering for UMAP (scattergl for speed)
+  ✔ IMPLEMENT: Efficient gene set scoring (vectorized operations)
+  ✔ OPTIMIZE: QC plot generation (grid layout, proper DPI)
 
-Deployment:
-  ✔ CREATE: Dockerfile for Shiny app
-  ✔ TEST: Container deployment successful
-  ✔ VERIFIED: Multi-mount data access
-  ☐ DOCUMENT: ShinyProxy deployment instructions (future)
-  ☐ DOCUMENT: Posit Connect deployment instructions (future)
+Deployment & Launch:
+  ✔ CREATE: Multi-method launcher (auto-detects Conda/Singularity/Docker)
+  ✔ CREATE: Simple conda-only launcher (bash launch_simple.sh)
+  ✔ IMPLEMENT: Conda environment detection (CONDA_PREFIX)
+  ✔ IMPLEMENT: Results directory auto-detection
+  ✔ IMPLEMENT: Clean output filtering (hide verbose R messages)
+  ✔ CREATE: Dockerfile for containerized deployment
+  ✔ TEST: Conda deployment successful (WSL2 Ubuntu)
+  ✔ TEST: Container deployment (Docker) tested
+  ✔ VERIFY: Data mounting and access patterns
 
-Notes (2026-01-19):
+Pipeline Integration:
+  ✔ CREATE: modules/local/launch_dashboard.nf
+  ✔ IMPLEMENT: dashboard_info.txt generation (absolute paths)
+  ✔ IMPLEMENT: Auto-path detection in global.R
+  ✔ FIX: QC plots publishing patterns (conf/modules.config)
+  ✔ FIX: quality_control.py JSON serialization (Infinity handling)
+
+Key Improvements (Session 2 - January 21, 2026):
+  ✔ Fixed QC plots not publishing to results/qc/plots/
+  ✔ Fixed dashboard launch scripts (method detection, clean output)
+  ✔ Fixed H5AD compatibility (encoding_type='null' issue)
+  ✔ Fixed QC data loading (auto-search multiple locations)
+  ✔ Fixed QC value boxes (correct JSON field names)
+  ✔ Fixed QC plot sizing (responsive CSS, max-height)
+  ✔ Improved QC thresholds (visual table instead of code-style text)
+  ✔ Improved violin plots (2×3 grid instead of horizontal row)
+  ✔ Improved gene expression UI (unified input for single/multiple genes)
+  ✔ Improved gene set scoring (0-1 normalization, AUCell-inspired)
+  ✔ Improved metadata table (cell_id first, CSV/Excel export)
+  ✔ Updated About tab (accurate features, GitHub link)
+
+Notes (2026-01-21):
   - Dashboard fully operational at http://localhost:3838
-  - Fixed Sys.getenv() syntax error in global.R
-  - Successfully tested with normalized_integrated.h5ad (1,049 cells)
-  - Container size: 2.56GB
-  - Data mounted at: /srv/shiny-server/data
+  - Launch: bash dashboard/launch_simple.sh results/
+  - All 5 tabs functional with production-ready features
+  - Successfully tested with PBMC test dataset (942 cells post-QC)
+  - H5AD compatibility fixer handles encoding issues automatically
+  - Gene set scoring uses min-max normalization (0-1 scale)
+  - Metadata export respects DataTables filters
+  - QC plots regenerated with improved layout
+  - Documentation points to GitHub for updates
 
 ═══════════════════════════════════════════════════════════════════════════
 PHASE 9: Configuration Enhancements

@@ -404,12 +404,21 @@ def plot_qc_metrics(
     all_metrics = base_metrics + extra_metrics
     n_metrics = len(all_metrics)
     
-    # 1. Violin plots
-    fig, axes = plt.subplots(1, n_metrics, figsize=(5 * n_metrics, 4))
+    # 1. Violin plots - arranged in a grid layout for better visualization
+    # Calculate grid dimensions (prefer more columns than rows, max 3 columns)
+    n_cols = min(3, n_metrics)
+    n_rows = (n_metrics + n_cols - 1) // n_cols  # Ceiling division
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    
+    # Flatten axes array for easier iteration
     if n_metrics == 1:
         axes = [axes]
+    else:
+        axes = axes.flatten()
     
-    for ax, metric in zip(axes, all_metrics):
+    for idx, metric in enumerate(all_metrics):
+        ax = axes[idx]
         sns.violinplot(data=adata.obs, y=metric, ax=ax, color='lightblue')
         ax.set_ylabel(metric.replace('_', ' ').title())
         ax.set_xlabel('')
@@ -424,6 +433,10 @@ def plot_qc_metrics(
                 ax.axhline(lower, color='red', linestyle='--', linewidth=1.5,
                           label=f'Lower: {lower:.1f}')
             ax.legend(fontsize=8)
+    
+    # Hide unused subplots if grid has extra spaces
+    for idx in range(n_metrics, len(axes)):
+        axes[idx].set_visible(False)
     
     plt.tight_layout()
     plt.savefig(output_dir / f"{prefix}_violin.png", dpi=300, bbox_inches='tight')
@@ -672,6 +685,11 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(o, np.integer):
             return int(o)
         elif isinstance(o, np.floating):
+            # Handle infinity and NaN
+            if np.isinf(o):
+                return None  # Convert infinity to null
+            elif np.isnan(o):
+                return None  # Convert NaN to null
             return float(o)
         elif isinstance(o, np.ndarray):
             return o.tolist()
@@ -686,6 +704,11 @@ def convert_to_serializable(obj):
     if isinstance(obj, np.integer):
         return int(obj)
     elif isinstance(obj, np.floating):
+        # Handle infinity and NaN
+        if np.isinf(obj):
+            return None  # Convert infinity to null
+        elif np.isnan(obj):
+            return None  # Convert NaN to null
         return float(obj)
     elif isinstance(obj, np.ndarray):
         return obj.tolist()

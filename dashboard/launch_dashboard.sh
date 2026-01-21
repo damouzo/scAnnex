@@ -11,6 +11,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="${1:-${SCRIPT_DIR}/../results_slc_first_run}"
 
+# Convert relative path to absolute path
+if [[ ! "${RESULTS_DIR}" = /* ]]; then
+    RESULTS_DIR="$(cd "${SCRIPT_DIR}" && cd "${RESULTS_DIR}" && pwd)"
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -39,9 +44,16 @@ command_exists() {
 #==============================================================================
 
 detect_method() {
-    print_step "Detecting available container/environment systems..."
+    # Priority order: Conda+R > Apptainer > Singularity > Docker > Manual install
+    # (Conda first because it's lightweight and likely already set up)
     
-    # Priority order: Apptainer > Singularity > Docker > Conda+R > Manual install
+    if command_exists conda && [[ -f "${SCRIPT_DIR}/environment_dashboard.yml" ]]; then
+        # Check if environment exists
+        if conda env list | grep -q "scannex-dashboard"; then
+            echo "conda"
+            return
+        fi
+    fi
     
     if command_exists apptainer; then
         echo "apptainer"
@@ -49,8 +61,6 @@ detect_method() {
         echo "singularity"
     elif command_exists docker; then
         echo "docker"
-    elif command_exists conda && [[ -f "${SCRIPT_DIR}/environment_dashboard.yml" ]]; then
-        echo "conda"
     else
         echo "manual"
     fi
@@ -192,13 +202,15 @@ launch_conda() {
     
     print_success "Activating environment..."
     
-    # Activate and run
-    eval "$(conda shell.bash hook)"
-    conda activate "$ENV_NAME"
-    
     PORT=3838
     
-    print_success "Starting dashboard..."
+    # Check if port is already in use
+    if ss -tln 2>/dev/null | grep -q ":${PORT} " || netstat -tln 2>/dev/null | grep -q ":${PORT} "; then
+        print_info "Port ${PORT} is in use, trying next port..."
+        PORT=$((PORT + 1))
+    fi
+    
+    print_success "Starting dashboard on port ${PORT}..."
     echo ""
     print_header
     echo -e "${GREEN}Dashboard is starting!${NC}"
@@ -207,10 +219,35 @@ launch_conda() {
     echo ""
     echo "Press Ctrl+C to stop"
     echo ""
+    echo -e "${YELLOW}Loading R libraries and data... (this may take 10-20 seconds)${NC}"
+    echo ""
     
     export SCANNEX_DATA_PATH="$RESULTS_DIR"
+    
+    # Activate and run using conda run
     cd "${SCRIPT_DIR}"
-    R -e "shiny::runApp('.', host='0.0.0.0', port=${PORT})"
+    
+    # Filter output to show only important messages
+    {
+        conda run -n "$ENV_NAME" --no-capture-output R --quiet --no-save -e "shiny::runApp('.', host='0.0.0.0', port=${PORT})" 2>&1
+    } | while IFS= read -r line; do
+        # Skip known harmless warnings
+        if echo "$line" | grep -q "UserWarning: Signature"; then
+            continue
+        elif echo "$line" | grep -q "This warnings indicates broken support"; then
+            continue
+        # Show important messages
+        elif echo "$line" | grep -q "Listening on"; then
+            echo ""
+            echo -e "${GREEN}✓ Dashboard ready!${NC}"
+            echo "$line"
+            echo ""
+        elif echo "$line" | grep -qE "(Loading required package|scAnnex Dashboard|Auto-detected|Default data path|initialized)"; then
+            echo "  $line"
+        elif echo "$line" | grep -qE "(Error|error|Failed|failed)" && ! echo "$line" | grep -q "UserWarning"; then
+            echo -e "${RED}✗${NC} $line"
+        fi
+    done
 }
 
 #==============================================================================
@@ -262,6 +299,7 @@ main() {
     echo ""
     
     # Detect and launch
+    print_step "Detecting available container/environment systems..."
     METHOD=$(detect_method)
     
     case "$METHOD" in
