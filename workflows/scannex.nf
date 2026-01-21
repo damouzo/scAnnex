@@ -10,6 +10,7 @@ include { DOUBLET_DETECTION       } from '../modules/local/doublet_detection'
 include { STANDARD_PROCESSING     } from '../modules/local/standard_processing'
 include { AUTO_ANNOT_CELLTYPIST   } from '../modules/local/auto_annot_celltypist'
 include { NORMALIZE_INTEGRATE     } from '../modules/local/normalize_integrate'
+include { LAUNCH_DASHBOARD        } from '../modules/local/launch_dashboard'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -107,6 +108,15 @@ workflow SCANNEX {
             annotated_output
         )
         final_output = NORMALIZE_INTEGRATE.out.h5ad
+    }
+    
+    //
+    // STEP 7: Launch Interactive Dashboard (Optional - enabled by default)
+    //
+    if (params.enable_dashboard) {
+        LAUNCH_DASHBOARD (
+            final_output.map { meta, h5ad -> h5ad }.first()
+        )
     }
     
     //

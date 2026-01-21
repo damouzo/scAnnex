@@ -2,7 +2,7 @@ process DOUBLET_DETECTION {
     tag "$meta.id"
     label 'process_medium'
 
-    conda "bioconda::scanpy=1.10.0 bioconda::anndata=0.10.3 bioconda::scrublet=0.2.3"
+    conda "scanpy>=1.9 scrublet>=0.2"
     container "quay.io/biocontainers/scanpy:1.10.0--pyhdfd78af_0"
 
     input:

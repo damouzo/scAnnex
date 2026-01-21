@@ -2,7 +2,7 @@ process UNIFY_INPUT {
     tag "$meta.id"
     label 'process_low'
 
-    conda "bioconda::scanpy=1.10.0 bioconda::anndata=0.10.3 conda-forge::numpy=1.24.0"
+    conda "scanpy>=1.9"
     container "quay.io/biocontainers/scanpy:1.10.0--pyhdfd78af_0"
 
     input:

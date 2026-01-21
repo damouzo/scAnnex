@@ -2,7 +2,7 @@ process NORMALIZE_INTEGRATE {
     tag "$meta.id"
     label 'process_high'
 
-    conda "bioconda::scanpy=1.10.0 bioconda::anndata=0.10.3 bioconda::harmonypy=0.0.9"
+    conda "scanpy>=1.9 harmonypy>=0.0.9"
     container "quay.io/biocontainers/scanpy:1.10.0--pyhdfd78af_0"
 
     input:

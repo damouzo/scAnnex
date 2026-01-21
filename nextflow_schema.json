@@ -293,6 +293,31 @@
                 }
             }
         },
+        "dashboard_options": {
+            "title": "Interactive Dashboard options",
+            "type": "object",
+            "description": "Parameters for the interactive visualization dashboard",
+            "properties": {
+                "enable_dashboard": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable interactive dashboard launch after pipeline completion",
+                    "fa_icon": "fas fa-chart-bar"
+                },
+                "dashboard_port": {
+                    "type": "integer",
+                    "default": 3838,
+                    "description": "Port for dashboard server (default Shiny port)",
+                    "fa_icon": "fas fa-network-wired"
+                },
+                "dashboard_host": {
+                    "type": "string",
+                    "default": "localhost",
+                    "description": "Host for dashboard server",
+                    "fa_icon": "fas fa-server"
+                }
+            }
+        },
         "generic_options": {
             "title": "Generic options",
             "type": "object",
