@@ -2,7 +2,7 @@ process AUTO_ANNOT_CELLTYPIST {
     tag "$meta.id"
     label 'process_medium'
 
-    conda "${projectDir}/env/scanpy.yml"
+    conda "bioconda::celltypist=1.6.2 bioconda::scanpy=1.10.0"
     container "quay.io/biocontainers/celltypist:1.6.2--pyhdfd78af_0"
 
     input:

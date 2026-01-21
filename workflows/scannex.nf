@@ -20,21 +20,37 @@ include { NORMALIZE_INTEGRATE     } from '../modules/local/normalize_integrate'
 workflow SCANNEX {
     main:
     //
-    // STEP 1: Parse samplesheet and create input channel
+    // STEP 1: Parse input (supports both single files AND CSV samplesheets)
     //
-    Channel
-        .fromPath(params.input)
-        .splitCsv(header: true)
-        .map { row ->
-            def meta = [
-                id: row.sample_id,
-                file_type: row.file_type,
-                batch: row.batch,
-                condition: row.condition
-            ]
-            [ meta, file(row.file_path, checkIfExists: true) ]
-        }
-        .set { input_ch }
+    def input_ch
+    if (params.input.endsWith('.csv') || params.input.endsWith('.tsv')) {
+        // CSV/TSV samplesheet with multiple samples
+        input_ch = Channel
+            .fromPath(params.input, checkIfExists: true)
+            .splitCsv(header: true, sep: params.input.endsWith('.tsv') ? '\t' : ',')
+            .map { row ->
+                def meta = [
+                    id: row.sample_id ?: file(row.file_path).simpleName,
+                    file_type: row.file_type ?: params.input_type,
+                    batch: row.batch ?: 'batch1',
+                    condition: row.condition ?: 'default'
+                ]
+                [ meta, file(row.file_path, checkIfExists: true) ]
+            }
+    } else {
+        // Single file input (h5ad, rds, or mtx directory)
+        input_ch = Channel
+            .fromPath(params.input, checkIfExists: true)
+            .map { file ->
+                def meta = [
+                    id: file.simpleName,
+                    file_type: params.input_type,
+                    batch: 'batch1',
+                    condition: 'default'
+                ]
+                [ meta, file ]
+            }
+    }
     
     //
     // STEP 2: Unify input format (per sample)

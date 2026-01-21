@@ -2,8 +2,8 @@ process QUALITY_CONTROL {
     tag "$meta.id"
     label 'process_medium'
 
-    conda "${projectDir}/env/scanpy.yml"
-    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
+    conda "bioconda::scanpy=1.10.0 bioconda::anndata=0.10.3 conda-forge::numpy=1.24.0"
+    container "quay.io/biocontainers/scanpy:1.10.0--pyhdfd78af_0"
 
     input:
     tuple val(meta), path(h5ad)
