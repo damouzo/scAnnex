@@ -2,6 +2,7 @@ process H5AD_TO_RDS {
     tag "$meta.id"
     label 'process_medium'
 
+    conda "bioconda::r-seurat=5.0.0 bioconda::r-seuratdisk=0.0.0.9021 conda-forge::r-base=4.3"
     container "docker.io/satijalab/seurat:5.0.0"
 
     input:

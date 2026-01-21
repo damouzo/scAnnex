@@ -2,8 +2,8 @@ process NORMALIZE_INTEGRATE {
     tag "$meta.id"
     label 'process_high'
 
-    conda "scanpy>=1.9 harmonypy>=0.0.9"
-    container "quay.io/biocontainers/scanpy:1.10.0--pyhdfd78af_0"
+    conda "\"scanpy>=1.9\" \"harmonypy>=0.0.9\""
+    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
 
     input:
     tuple val(meta), path(h5ad)

@@ -11,7 +11,8 @@ conda_prefix <- Sys.getenv("CONDA_PREFIX")
 if (conda_prefix != "") {
   # We're in a conda environment, use its Python
   python_path <- file.path(conda_prefix, "bin", "python3")
-  message(sprintf("Using Conda Python: %s", python_path))
+  # Suppress this message - it's logged to dashboard.log instead
+  # message(sprintf("Using Conda Python: %s", python_path))
 } else {
   # Fallback to system Python (may not work without packages)
   python_path <- "/usr/bin/python3"
@@ -25,16 +26,19 @@ Sys.setenv(RETICULATE_PYTHON = python_path)
 # Load R Libraries
 # ==============================================================================
 
-library(shiny)
-library(shinydashboard)
-library(shinyWidgets)
-library(plotly)
-library(DT)
-library(ggplot2)
-library(reticulate)  # Loaded AFTER setting RETICULATE_PYTHON
-library(viridis)
-library(data.table)
-library(jsonlite)
+# Suppress all package startup messages for clean output
+suppressPackageStartupMessages({
+  library(shiny)
+  library(shinydashboard)
+  library(shinyWidgets)
+  library(plotly)
+  library(DT)
+  library(ggplot2)
+  library(reticulate)  # Loaded AFTER setting RETICULATE_PYTHON
+  library(viridis)
+  library(data.table)
+  library(jsonlite)
+})
 
 # ==============================================================================
 # Finalize Python Configuration
@@ -42,11 +46,13 @@ library(jsonlite)
 
 use_python(python_path, required = TRUE)
 
-# Import required Python modules
-ad <- import("anndata")
-sc <- import("scanpy")
-np <- import("numpy")
-pd <- import("pandas")
+# Import required Python modules (suppress warnings)
+suppressWarnings({
+  ad <- import("anndata")
+  sc <- import("scanpy")
+  np <- import("numpy")
+  pd <- import("pandas")
+})
 
 # ==============================================================================
 # Data Loading Functions
@@ -172,8 +178,10 @@ load_qc_report <- function(qc_dir) {
   
   # Try multiple possible locations for qc_report.json
   possible_paths <- c(
-    file.path(qc_dir, "qc_report.json"),           # Direct path
-    file.path(qc_dir, "results", "qc_report.json") # In results subdirectory
+    file.path(qc_dir, "qc_report.json"),             # Direct path
+    file.path(qc_dir, "qc_results", "qc_report.json"), # In qc_results subdirectory (CURRENT)
+    file.path(qc_dir, "results", "qc_report.json"),  # In results subdirectory (OLD)
+    file.path(dirname(qc_dir), "qc", "qc_report.json")  # Parent qc dir
   )
   
   report_path <- NULL
@@ -208,8 +216,9 @@ get_qc_plots <- function(qc_dir) {
   
   # Try multiple possible locations for plots
   possible_dirs <- c(
-    qc_dir,                            # Direct path
-    file.path(qc_dir, "plots")         # In plots subdirectory
+    qc_dir,                                  # Direct path
+    file.path(qc_dir, "qc_results"),         # In qc_results subdirectory (CURRENT)
+    file.path(qc_dir, "plots")               # In plots subdirectory
   )
   
   plot_files <- character(0)

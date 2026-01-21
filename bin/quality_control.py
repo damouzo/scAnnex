@@ -711,9 +711,20 @@ def convert_to_serializable(obj):
             return None  # Convert NaN to null
         return float(obj)
     elif isinstance(obj, np.ndarray):
-        return obj.tolist()
+        # Convert array elements recursively to handle inf/nan
+        return [convert_to_serializable(item) for item in obj.tolist()]
     elif isinstance(obj, np.bool_):
         return bool(obj)
+    elif isinstance(obj, tuple):
+        # Handle tuples (e.g., thresholds that are (min, max) tuples)
+        return [convert_to_serializable(item) for item in obj]
+    elif isinstance(obj, (float, int)) and not isinstance(obj, bool):
+        # Handle Python native inf/nan that may come from ndarray.tolist()
+        if obj == float('inf') or obj == float('-inf'):
+            return None
+        elif obj != obj:  # NaN check (NaN != NaN)
+            return None
+        return obj
     elif isinstance(obj, dict):
         return {key: convert_to_serializable(value) for key, value in obj.items()}
     elif isinstance(obj, list):
@@ -787,6 +798,8 @@ def save_qc_report(
         }
     
     # Save JSON report (use custom encoder for numpy types)
+    # Convert entire report to ensure no Infinity/NaN values
+    report = convert_to_serializable(report)
     report_path = output_dir / "qc_report.json"
     with open(report_path, 'w') as f:
         json.dump(report, f, indent=2, cls=NumpyEncoder)

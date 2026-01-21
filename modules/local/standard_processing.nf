@@ -2,8 +2,8 @@ process STANDARD_PROCESSING {
     tag "$meta.id"
     label 'process_high'
 
-    conda "scanpy>=1.9 python-igraph leidenalg"
-    container "quay.io/biocontainers/scanpy:1.10.0--pyhdfd78af_0"
+    conda "\"scanpy>=1.9\" python-igraph leidenalg"
+    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
 
     input:
     tuple val(meta), path(h5ad)

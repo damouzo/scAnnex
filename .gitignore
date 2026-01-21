@@ -2,6 +2,8 @@
 .nextflow*
 work/
 results/
+test_no_equals/
+results_wave_*/
 *.html
 *.svg
 timeline*.html
@@ -93,3 +95,13 @@ secrets.yaml
 # OS
 Thumbs.db
 .DS_Store
+
+# Development scripts (WSL2/Docker setup helpers)
+install_docker_wsl2.sh
+fix_docker_wsl2.sh
+start_docker.sh
+test_wave_profile.sh
+verify_docker_setup.sh
+
+# Nextflow conda artifacts (bash redirection misinterpretation)
+/=*

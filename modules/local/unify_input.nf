@@ -2,8 +2,8 @@ process UNIFY_INPUT {
     tag "$meta.id"
     label 'process_low'
 
-    conda "scanpy>=1.9"
-    container "quay.io/biocontainers/scanpy:1.10.0--pyhdfd78af_0"
+    conda "\"scanpy>=1.9\""
+    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
 
     input:
     tuple val(meta), path(input_file)

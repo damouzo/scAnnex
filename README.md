@@ -1,312 +1,301 @@
+<div align="center">
+
+<img src="docs/images/Logo.png" alt="scAnnex Logo" width="300"/>
+
 # scAnnex
 
-A production-ready Nextflow pipeline for automated single-cell RNA-seq analysis with integrated quality control, batch correction, and interactive visualization.
+**Automated single-cell RNA-seq analysis.**  
+From raw counts to insights.
 
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
+[![run with conda](https://img.shields.io/badge/run%20with-conda-44A833.svg?labelColor=000000)](https://docs.conda.io/)
+[![run with wave](https://img.shields.io/badge/run%20with-wave-1EAEDB.svg?labelColor=000000)](https://www.nextflow.io/docs/latest/wave.html)
 [![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
 [![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
 
-## Overview
+[Quick Start](#quick-start) •
+[Documentation](#documentation) •
+[Dashboard](#dashboard) •
+[Examples](#examples)
 
-scAnnex implements a comprehensive workflow for downstream analysis of single-cell RNA-seq data, providing automated quality control with adaptive thresholds, batch integration using Harmony, and an interactive Shiny dashboard for data exploration. The pipeline is designed for reproducibility and scalability, supporting execution on local machines, HPC clusters, and cloud environments.
+</div>
 
-### Key Features
+---
 
-- **Flexible Input Formats**: Native support for H5AD (AnnData), RDS (Seurat), and 10X MTX formats
-- **Adaptive Quality Control**: MAD-based automatic threshold calculation with manual override capability
-- **Batch Integration**: Harmony-based correction with pre/post integration quality assessment
-- **Polyglot Annotation**: Seamless integration of Python (CellTypist) and R (Azimuth) annotation tools
-- **Interactive Dashboard**: Docker-based Shiny application with backed H5AD reading for large datasets
-- **Production-Grade**: Comprehensive logging, reproducible environments, and standardized outputs
+## What it does
 
-## Installation
+scAnnex automates the complete workflow for single-cell RNA-seq analysis:
 
-### Prerequisites
+- **Quality Control** — Adaptive filtering with quantile-based thresholds
+- **Doublet Detection** — Scrublet integration for automated doublet removal
+- **Normalization** — Log-normalization and highly variable gene selection
+- **Batch Correction** — Harmony integration for multi-sample datasets
+- **Clustering** — Multi-resolution Leiden clustering
+- **Cell Annotation** — CellTypist integration with automatic model download
+- **Interactive Dashboard** — Real-time exploration with R Shiny
 
-1. **Nextflow** (version 23.04.0 or later)
-   ```bash
-   curl -s https://get.nextflow.io | bash
-   mv nextflow /usr/local/bin/
-   ```
+<div align="center">
+  <img src="docs/images/QC_overview.png" alt="scAnnex Dashboard" width="800"/>
+  <p><i>Interactive dashboard for real-time data exploration</i></p>
+</div>
 
-2. **Container Engine** (choose one):
-   - Docker (recommended for local execution)
-   - Singularity/Apptainer (recommended for HPC)
-   - Podman (alternative to Docker)
-
-### Quick Test
-
-Verify installation with the included test profile:
-
-```bash
-nextflow run main.nf -profile test,docker
-```
-
-This runs a minimal dataset (1,049 cells) through the complete pipeline in approximately 5-10 minutes.
+---
 
 ## Quick Start
 
-### Basic Analysis
+### Installation
 
-Process a single H5AD file with default QC parameters:
+Install Nextflow:
+```bash
+curl -s https://get.nextflow.io | bash
+sudo mv nextflow /usr/local/bin/
+```
+
+### Run the pipeline
+
+Process your data in one command:
 
 ```bash
 nextflow run main.nf \
-  --input sample_data.h5ad \
-  --input_type h5ad \
+  -profile wave \
+  --input samplesheet.csv \
   --outdir results \
-  -profile docker
+  --max_memory '8.GB'
 ```
 
-### Analysis with Batch Correction
+**Samplesheet format** (`samplesheet.csv`):
+```csv
+sample_id,file_type,file_path,batch,condition
+sample1,h5ad,data/sample1.h5ad,batch1,control
+sample2,h5ad,data/sample2.h5ad,batch1,treated
+```
 
-Integrate multiple batches using Harmony:
+### Launch the dashboard
 
 ```bash
-nextflow run main.nf \
-  --input sample_data.h5ad \
-  --input_type h5ad \
-  --run_integration true \
-  --batch_key batch \
-  --integration_method harmony \
-  --outdir results \
-  -profile docker
+cd dashboard
+bash launch_dashboard.sh ../results
 ```
 
-### With Automated Annotation
+Access at: http://localhost:3838
 
-Enable CellTypist annotation:
+---
 
+## Profiles
+
+Choose the right execution profile for your environment:
+
+| Profile | Use Case | Command |
+|---------|----------|---------|
+| **wave** | Recommended • Builds containers on-demand | `-profile wave` |
+| **conda** | Simple • Works everywhere | `-profile conda` |
+| **docker** | Local machines | `-profile docker` |
+| **singularity** | HPC clusters | `-profile singularity` |
+
+**For laptops** with limited RAM:
 ```bash
-nextflow run main.nf \
-  --input sample_data.h5ad \
-  --annotation.enabled true \
-  --annotation.tools celltypist \
-  --annotation.celltypist_model Immune_All_Low.pkl \
-  --outdir results \
-  -profile docker
+nextflow run main.nf -profile wave --max_memory '8.GB'
 ```
 
-## Core Parameters
+**For HPC** with plenty of resources:
+```bash
+nextflow run main.nf -profile wave --max_memory '120.GB'
+```
 
-### Input/Output
+> Memory allocation adapts automatically. Processes use 60-75% of `--max_memory` to prevent failures.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `--input` | path | *required* | Input file (H5AD, RDS, or MTX directory) |
-| `--input_type` | string | `h5ad` | Format: `h5ad`, `rds`, or `mtx` |
-| `--outdir` | path | `./results` | Output directory for all results |
+---
+
+## Parameters
+
+### Essential
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--input` | Samplesheet CSV path | *required* |
+| `--outdir` | Output directory | `./results` |
+| `--max_memory` | Maximum memory available | `128.GB` |
 
 ### Quality Control
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `--use_mad_thresholds` | boolean | `true` | Use MAD-based adaptive thresholds |
-| `--mad_multiplier` | float | `5.0` | MAD threshold stringency (higher = more permissive) |
-| `--min_genes` | integer | `200` | Minimum genes per cell (if MAD disabled) |
-| `--min_counts` | integer | `500` | Minimum UMI counts per cell (if MAD disabled) |
-| `--max_mito_percent` | float | `20.0` | Maximum mitochondrial content (%) |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--use_quantile_filtering` | Use quantile-based thresholds | `true` |
+| `--feature_quantile_low` | Lower percentile for genes | `0.10` |
+| `--feature_quantile_high` | Upper percentile for genes | `0.90` |
+| `--max_mito_percent` | Max mitochondrial percentage | `20` |
 
-### Batch Integration
+### Processing
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `--run_integration` | boolean | `false` | Enable Harmony batch correction |
-| `--batch_key` | string | `batch` | Column name for batch variable in `.obs` |
-| `--n_top_genes` | integer | `2000` | Highly variable genes for integration |
-| `--n_pcs` | integer | `50` | Principal components to compute |
-| `--harmony_theta` | float | `2.0` | Harmony diversity clustering penalty |
-| `--harmony_max_iter` | integer | `10` | Maximum Harmony iterations |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--run_doublet_detection` | Detect and remove doublets | `true` |
+| `--run_integration` | Enable batch correction | `false` |
+| `--batch_key` | Batch column name | `null` |
+| `--run_auto_annotation` | Annotate cell types | `true` |
+| `--celltypist_model` | CellTypist model | `Immune_All_Low.pkl` |
 
-### Annotation
+### Clustering
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `--annotation.enabled` | boolean | `false` | Enable automated cell type annotation |
-| `--annotation.tools` | string | `celltypist` | Annotation tools: `celltypist`, `azimuth`, or `celltypist,azimuth` |
-| `--annotation.celltypist_model` | string | `Immune_All_Low.pkl` | CellTypist model name |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--clustering_resolutions` | Leiden resolutions | `0.1,0.3,0.5,0.7,0.9` |
+| `--n_neighbors` | Number of neighbors for UMAP | `15` |
+| `--n_pcs` | Principal components | `50` |
 
-## Pipeline Output
+---
+
+## Dashboard
+
+The interactive dashboard provides real-time exploration of your results.
+
+**Features:**
+- Quality control metrics visualization
+- Interactive UMAP plots with WebGL acceleration
+- Gene expression overlay
+- Cell type composition analysis
+- Export-ready plots
+
+**Launch:**
+```bash
+cd dashboard
+bash launch_dashboard.sh ../results
+```
+
+The launcher handles environment setup automatically on first run (~5-10 min, one-time only).
+
+**Requirements:**
+- R 4.3+ with Shiny
+- Python 3.10+ with scanpy, anndata
+
+All dependencies installed automatically via conda.
+
+---
+
+## Output Structure
 
 ```
 results/
+├── unified_input/
+│   └── sample_unified.h5ad          # Standardized input
 ├── qc/
-│   ├── qc_filtered.h5ad              # Filtered cells passing QC
-│   ├── qc_report.json                # QC metrics and thresholds
-│   └── plots/                        # QC visualization PDFs
-├── normalized_integrated/
-│   ├── normalized_integrated.h5ad    # Batch-corrected data with UMAP
-│   └── integration_report.json       # Integration quality metrics
-├── annotation/                       # (if enabled)
-│   ├── celltypist/
-│   │   └── sample_celltypist.csv     # CellTypist predictions
-│   ├── azimuth/                      # (if enabled)
-│   │   └── sample_azimuth.csv        # Azimuth predictions
-│   └── sample_annotated.h5ad         # Final annotated dataset
+│   ├── sample_qc.h5ad                # QC-filtered data
+│   └── qc_results/
+│       ├── qc_report.json            # QC metrics
+│       ├── qc_before_violin.png      # Pre-filtering plots
+│       └── cell_attrition_log.csv    # Filtering summary
+├── doublet_detection/
+│   ├── sample_doublets.h5ad          # Doublet scores
+│   └── doublet_scores.csv
+├── normalized/
+│   └── sample_processed.h5ad         # Normalized + clustered
+├── annotation/
+│   ├── sample_annotated.h5ad         # Final annotated data
+│   └── sample_celltypist.csv         # Cell type predictions
 └── pipeline_info/
-    ├── execution_report.html         # Nextflow execution report
-    └── pipeline_dag.html             # Workflow DAG visualization
+    ├── execution_report.html
+    ├── execution_timeline.html
+    └── pipeline_dag.html
 ```
 
-## Interactive Dashboard
+---
 
-The scAnnex dashboard provides an interactive web-based interface for exploring single-cell RNA-seq analysis results. Built with R Shiny, it offers real-time data visualization with support for both small datasets and large-scale analyses (>100k cells).
+## Examples
 
-### Features
+### Basic Analysis
 
-- **Data Input Tab**: Load H5AD files with automatic format detection and backed mode for large datasets
-- **QC Overview Tab**: Interactive quality control metrics with before/after filtering comparison
-- **Clustering & UMAP Tab**: 
-  - Interactive UMAP visualization with WebGL acceleration
-  - Color by cell types, QC metrics, or batch information
-  - Adjustable point size and opacity
-  - Cell metadata table with search and filtering
-- **Gene Expression Tab**: 
-  - Real-time gene expression visualization on UMAP
-  - Continuous color scales (Viridis)
-  - Expression value hover tooltips
-- **About Tab**: Pipeline version and configuration information
-
-### Quick Start
-
-#### Option 1: Conda Environment (Recommended - No sudo required)
-
-```bash
-cd dashboard
-./setup_dashboard.sh      # Auto-detects and sets up environment
-./launch_dashboard.sh     # Launches on http://localhost:8888
-```
-
-#### Option 2: Docker
-
-```bash
-cd dashboard
-docker build -t scannex-dashboard .
-docker run -p 3838:3838 -v $(pwd)/../results:/data scannex-dashboard
-# Access at: http://localhost:3838
-```
-
-#### Option 3: HPC with Apptainer/Singularity
-
-```bash
-cd dashboard
-apptainer build scannex-dashboard.sif scannex-dashboard.def
-apptainer run --bind ./results:/data scannex-dashboard.sif
-```
-
-### Dashboard Usage
-
-1. **Load your data**: Enter the path to your `*_annotated.h5ad` file from pipeline results
-2. **Explore QC metrics**: View filtering statistics and quality control plots
-3. **Visualize clusters**: Interactive UMAP colored by cell types or metadata
-4. **Inspect gene expression**: Search for marker genes and view their expression patterns
-
-### Example Dataset
-
-The dashboard has been tested with the included PBMC dataset:
-- **935 cells** × **14,521 genes**
-- **6 cell types** annotated:
-  - Tcm/Naive helper T cells (36.6%)
-  - Classical monocytes (23.7%)
-  - Naive B cells (18.8%)
-  - MAIT cells (13.0%)
-  - CD16+ NK cells (5.6%)
-  - Non-classical monocytes (2.2%)
-
-### Memory Optimization
-
-The dashboard automatically detects file size and uses backed mode (memory-efficient reading) for large datasets:
-- **< 500 MB**: Full in-memory loading (fast, complete feature access)
-- **≥ 500 MB**: Backed mode (low memory, suitable for HPC)
-
-### Troubleshooting
-
-For detailed setup instructions and troubleshooting:
-- **Simple guide**: `dashboard/README_SIMPLE.md`
-- **Quick reference**: `dashboard/QUICKSTART.md`
-- **Manual setup**: `dashboard/MANUAL_LAUNCH.md`
-- **WSL2 issues**: `dashboard/TROUBLESHOOTING_WSL2.md`
-
-### Dashboard Requirements
-
-**Conda environment** (recommended):
-- R 4.3+
-- Python 3.10+ with anndata, scanpy
-- R packages: shiny, shinydashboard, plotly, DT, reticulate
-
-All dependencies are managed automatically by `setup_dashboard.sh`.
-
-## Execution Profiles
-
-scAnnex supports multiple execution profiles:
-
-| Profile | Description | Container Engine |
-|---------|-------------|------------------|
-| `docker` | Local execution with Docker | Docker |
-| `singularity` | HPC execution with Singularity | Singularity/Apptainer |
-| `test` | Minimal test dataset | None (combine with `docker` or `singularity`) |
-
-### HPC Execution (SLURM)
+Process a single sample with default QC:
 
 ```bash
 nextflow run main.nf \
-  --input sample_data.h5ad \
+  -profile wave \
+  --input samplesheet.csv \
   --outdir results \
+  --max_memory '8.GB'
+```
+
+### Multi-sample with Batch Correction
+
+Integrate multiple samples with Harmony:
+
+```bash
+nextflow run main.nf \
+  -profile wave \
+  --input samplesheet.csv \
+  --outdir results \
+  --run_integration \
+  --batch_key batch \
+  --max_memory '32.GB'
+```
+
+### HPC Execution
+
+Run on SLURM cluster with Singularity:
+
+```bash
+nextflow run main.nf \
   -profile singularity \
+  --input samplesheet.csv \
+  --outdir results \
+  --max_memory '120.GB' \
   -process.executor slurm \
   -process.queue normal
 ```
 
-## Architecture
+### Resume from Checkpoint
 
-scAnnex implements a modular Nextflow workflow with the following components:
+Continue a failed or interrupted run:
 
-1. **UNIFY_INPUT**: Converts RDS/MTX to standardized H5AD format
-2. **QUALITY_CONTROL**: MAD-based adaptive QC with visualization
-3. **DOUBLET_DETECTION**: Scrublet-based doublet scoring (optional)
-4. **NORMALIZE_INTEGRATE**: Log-normalization and Harmony integration
-5. **H5AD_TO_RDS**: H5AD → Seurat RDS bridge (for R-based annotation)
-6. **AUTO_ANNOT_CELLTYPIST**: Python-based CellTypist annotation
-7. **AUTO_ANNOT_AZIMUTH**: R-based Azimuth annotation (optional)
-8. **AUTO_ANNOT_MERGE**: Consolidates multi-tool predictions
-
-## Data Conventions
-
-### AnnData Structure
-
-All outputs follow standardized AnnData conventions:
-
-```python
-adata.obs            # Cell metadata (sample_id, batch, QC metrics, clusters)
-adata.var            # Gene metadata (highly_variable, mean, dispersion)
-adata.X              # Normalized expression matrix (log1p)
-adata.layers['counts']  # Raw counts (preserved)
-adata.obsm['X_pca']     # PCA coordinates (50 components)
-adata.obsm['X_pca_harmony']  # Harmony-corrected PCA (if integration enabled)
-adata.obsm['X_umap']    # UMAP coordinates (2D)
-adata.uns['qc']         # QC parameters and thresholds
-adata.uns['integration']  # Integration parameters
+```bash
+nextflow run main.nf \
+  -profile wave \
+  --input samplesheet.csv \
+  --outdir results \
+  -resume
 ```
 
-### Annotation Columns
+---
 
-Automated annotations are stored as:
+## Documentation
 
-```python
-adata.obs['celltype_celltypist']  # CellTypist predictions
-adata.obs['celltype_azimuth']     # Azimuth predictions (if enabled)
-adata.obs['celltype_consensus']   # Merged consensus labels (if multi-tool)
-```
+- **[Getting Started](docs/GETTING_STARTED.md)** — Detailed installation and first run
+- **[Execution Profiles](docs/EXECUTION_PROFILES.md)** — Profile comparison and troubleshooting
+- **[Dashboard Usage](docs/DASHBOARD_USAGE.md)** — Interactive visualization guide
+- **[Troubleshooting](docs/Troubleshooting.md)** — Common issues and solutions
+
+---
+
+## Requirements
+
+**Nextflow:** ≥23.04.0  
+**Container engine:** Docker, Singularity, or Podman  
+**Conda:** (optional) For non-containerized execution
+
+**Pipeline tested on:**
+- Ubuntu 18.04+
+- macOS 12+
+- WSL2 (Windows)
+- HPC clusters (SLURM, PBS)
+
+---
 
 ## License
 
-MIT License. See `LICENSE` file for details.
+MIT License. See [LICENSE](LICENSE) for details.
 
-## Software Dependencies
+---
 
-- **Python**: scanpy (1.9+), anndata, numpy, pandas, harmony-pytorch
-- **R**: Seurat, SeuratDisk, reticulate (for RDS conversion and Azimuth)
-- **Nextflow**: 23.04.0+
-- **Dashboard**: R Shiny, reticulate, plotly, DT
+## Citation
 
-All dependencies are managed via Docker/Singularity containers.
+If you use scAnnex in your research, please cite:
+
+```
+scAnnex: Automated Nextflow pipeline for single-cell RNA-seq analysis
+https://github.com/damouzo/scAnnex
+```
+
+---
+
+<div align="center">
+  <sub>Built with Nextflow • Powered by Scanpy</sub>
+</div>
