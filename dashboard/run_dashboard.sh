@@ -19,7 +19,10 @@ PORT="3838"
 # Directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-TEST_DATA_DIR="$PROJECT_ROOT/test_data/analytical_core_results"
+# Note: This points to test results directory. 
+# For demo data inputs, see data_demo/
+# For test scripts, see tests/
+TEST_DATA_DIR="$PROJECT_ROOT/tests/results/analytical_core"
 
 echo "======================================================================="
 echo "scAnnex Dashboard - Docker Runner"
@@ -48,7 +51,7 @@ case "$ACTION" in
     # Check if test data exists
     if [ ! -d "$TEST_DATA_DIR" ]; then
       echo -e "${YELLOW}⚠ Test data not found: $TEST_DATA_DIR${NC}"
-      echo "  Please run test_data/test_analytical_core.sh first to generate test data"
+      echo "  Please run tests/test_analytical_core.sh first to generate test data"
       exit 1
     fi
     

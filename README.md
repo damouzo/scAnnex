@@ -61,7 +61,26 @@ curl -s https://get.nextflow.io | bash
 sudo mv nextflow /usr/local/bin/
 ```
 
-### Run the pipeline
+### Test with Demo Data
+
+Try scAnnex with included demo data:
+
+```bash
+nextflow run main.nf \
+  -profile test,docker \
+  --outdir test_results
+```
+
+Or test specific input formats:
+```bash
+# H5AD format
+nextflow run main.nf --input data_demo/H5AD/samplesheet.csv --outdir results
+
+# 10x MTX format
+nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results
+```
+
+### Run with Your Data
 
 Process your data in one command:
 
@@ -267,7 +286,8 @@ nextflow run main.nf \
 
 ## Documentation
 
-- **[Getting Started](docs/GETTING_STARTED.md)** — Detailed installation and first run
+- **[Getting Started](docs/GETTING_STARTED.md)** — Installation and first run
+- **[Testing Guide](docs/TESTING.md)** — Demo data and testing workflows
 - **[Execution Profiles](docs/EXECUTION_PROFILES.md)** — Profile comparison and troubleshooting
 - **[Dashboard Usage](docs/DASHBOARD_USAGE.md)** — Interactive visualization guide
 - **[Troubleshooting](docs/Troubleshooting.md)** — Common issues and solutions

@@ -1,0 +1,2 @@
+sample_id,file_type,file_path,batch,condition
+PBMC_1k,h5ad,data_demo/H5AD/pbmc_1k.h5ad,batch1,control

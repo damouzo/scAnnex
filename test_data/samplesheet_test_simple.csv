@@ -1,2 +1,0 @@
-sample_id,file_type,file_path,batch,condition
-PBMC_sample,h5ad,test_data/outputs/PBMC_MTX_quick_test.h5ad,batch1,control

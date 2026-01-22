@@ -44,7 +44,9 @@ jobs:
 
       - name: Download test data
         run: |
-          python bin/download_test_data.py --output-dir test_data || echo "Test data download script not available yet"
+          # Demo data should be included in repo
+          ls -la data_demo/
+          echo "Demo data available"
 
       - name: Run pipeline with test profile
         run: |

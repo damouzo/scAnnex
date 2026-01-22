@@ -1,4 +1,0 @@
-sample_id,file_type,file_path,batch,condition
-PBMC_MTX,mtx,test_data/mtx/filtered_feature_bc_matrix,batch1,control
-PBMC_H5AD,h5ad,test_data/h5ad/pbmc_100cells.h5ad,batch1,treated
-PBMC_RDS,rds,test_data/rds/pbmc_seurat.rds,batch2,control
