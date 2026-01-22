@@ -199,10 +199,10 @@ def load_h5ad(input_path: Path) -> ad.AnnData:
 
 
 def load_rds(input_path: Path, rscript_path: str = "Rscript") -> ad.AnnData:
-    """Load RDS (Seurat) file via SeuratDisk two-step conversion.
+    """Load RDS (Seurat) file via direct CSV export.
     
-    This method uses SeuratDisk to convert RDS → h5seurat → h5ad, which
-    provides better metadata preservation compared to anndata2ri.
+    This method converts RDS to CSV/MTX format using R, then reads it with scanpy.
+    This approach is more compatible with conda (no SeuratDisk dependency).
     
     Args:
         input_path: Path to RDS file
@@ -214,28 +214,27 @@ def load_rds(input_path: Path, rscript_path: str = "Rscript") -> ad.AnnData:
     Raises:
         RuntimeError: If R conversion fails
     """
-    logger.info(f"Loading RDS file via SeuratDisk: {input_path}")
+    logger.info(f"Loading RDS file via direct conversion: {input_path}")
     
-    # Create temporary file for h5seurat intermediate
-    with tempfile.NamedTemporaryFile(suffix=".h5seurat", delete=False) as tmp:
-        h5seurat_path = tmp.name
-    
-    try:
-        # Step 1: Convert RDS to h5seurat using R script
-        logger.info("Step 1/2: Converting RDS to h5seurat format...")
+    # Create temporary directory for CSV export
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_dir = Path(tmpdir)
+        
+        # Step 1: Convert RDS to CSV/MTX using R script
+        logger.info("Step 1/2: Exporting Seurat object to CSV/MTX format...")
         
         # Get path to R conversion script
         script_dir = Path(__file__).parent
-        r_script = script_dir / "convert_rds_to_h5seurat.R"
+        r_script = script_dir / "convert_rds_to_h5ad_direct.R"
         
         if not r_script.exists():
             raise FileNotFoundError(
                 f"R conversion script not found: {r_script}\n"
-                "Expected location: bin/convert_rds_to_h5seurat.R"
+                "Expected location: bin/convert_rds_to_h5ad_direct.R"
             )
         
         # Execute R script
-        cmd = [rscript_path, str(r_script), str(input_path), h5seurat_path]
+        cmd = [rscript_path, str(r_script), str(input_path), str(csv_dir)]
         logger.debug(f"Executing: {' '.join(cmd)}")
         
         result = subprocess.run(
@@ -256,33 +255,42 @@ def load_rds(input_path: Path, rscript_path: str = "Rscript") -> ad.AnnData:
                 error_msg += f"\nStderr: {result.stderr}"
             raise RuntimeError(error_msg)
         
-        # Step 2: Convert h5seurat to h5ad using scanpy
-        logger.info("Step 2/2: Converting h5seurat to h5ad format...")
+        # Step 2: Read CSV/MTX data with scanpy
+        logger.info("Step 2/2: Reading exported data with scanpy...")
         
         try:
-            # Read h5seurat file
-            adata = sc.read_10x_h5(h5seurat_path, gex_only=False)
+            # Read count matrix
+            from scipy.io import mmread
+            counts = mmread(csv_dir / "matrix.mtx").T.tocsr()
+            
+            # Read gene names
+            genes = pd.read_csv(csv_dir / "genes.tsv", sep="\t", header=None, names=["gene"])
+            
+            # Read cell barcodes
+            barcodes = pd.read_csv(csv_dir / "barcodes.tsv", sep="\t", header=None, names=["barcode"])
+            
+            # Read metadata
+            metadata = pd.read_csv(csv_dir / "metadata.csv", index_col=0)
+            
+            # Create AnnData object
+            adata = ad.AnnData(
+                X=counts,
+                obs=metadata,
+                var=genes.set_index("gene")
+            )
+            
+            # Set obs_names and var_names
+            adata.obs_names = barcodes["barcode"].values
+            
             logger.info(f"Successfully converted: {adata.n_obs} cells × {adata.n_vars} genes")
             return adata
+            
         except Exception as e:
-            logger.error(f"Failed to read h5seurat file: {e}")
-            logger.info("Attempting alternative conversion method...")
-            
-            # Alternative: use anndata directly
-            import h5py
-            with h5py.File(h5seurat_path, 'r') as f:
-                logger.info(f"H5Seurat file structure: {list(f.keys())}")
-            
+            logger.error(f"Failed to read exported CSV data: {e}")
             raise RuntimeError(
-                f"Failed to convert h5seurat to AnnData: {e}\n"
-                "This may indicate an incompatibility with the Seurat object structure."
+                f"Failed to convert CSV/MTX to AnnData: {e}\n"
+                "Check that the R script exported data correctly."
             )
-    
-    finally:
-        # Clean up temporary h5seurat file
-        if os.path.exists(h5seurat_path):
-            os.unlink(h5seurat_path)
-            logger.debug(f"Cleaned up temporary file: {h5seurat_path}")
 
 
 def load_mtx(input_path: Path, make_unique: bool = False) -> ad.AnnData:

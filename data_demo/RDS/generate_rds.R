@@ -24,14 +24,29 @@ cat("Package Version:\n")
 cat(sprintf("  Seurat: %s\n\n", packageVersion("Seurat")))
 
 # Set paths
-script_dir <- dirname(normalizePath(commandArgs()[4]))
-mtx_dir <- file.path(script_dir, "10xMTX", "filtered_feature_bc_matrix")
-rds_dir <- file.path(script_dir, "RDS")
+args <- commandArgs(trailingOnly = FALSE)
+file_arg <- grep("--file=", args, value = TRUE)
 
-# Create output directory
+if (length(file_arg) > 0) {
+  # Extract script path by removing the "--file=" prefix
+  script_path <- normalizePath(sub("--file=", "", file_arg))
+  script_dir <- dirname(script_path)
+} else {
+  # Fallback for interactive execution
+  script_dir <- getwd()
+}
+
+# The 10xMTX folder is one level above the script (RDS/)
+# Use ".." to move up one directory
+mtx_dir <- normalizePath(file.path(script_dir, "..", "10xMTX", "filtered_feature_bc_matrix"), mustWork = FALSE)
+rds_dir <- script_dir  # Save the RDS in the same directory as the script
+
+cat(sprintf("Searching for data in: %s\n", mtx_dir))
+
+# Create output directory if it does not exist
 dir.create(rds_dir, showWarnings = FALSE, recursive = TRUE)
 
-# Check MTX directory exists
+# Check if MTX directory exists
 if (!dir.exists(mtx_dir)) {
   cat(sprintf("ERROR: MTX directory not found: %s\n", mtx_dir))
   quit(status = 1)
@@ -71,7 +86,7 @@ tryCatch(
   }
 )
 
-# Add metadata
+# Add metadata columns
 cat("\nAdding metadata...\n")
 seurat_obj$sample_id <- "PBMC_1k"
 seurat_obj$batch <- "batch1"
@@ -89,7 +104,7 @@ cat("\nRunning basic normalization...\n")
 seurat_obj <- NormalizeData(seurat_obj, verbose = FALSE)
 cat("✓ Normalization complete\n")
 
-# Save RDS
+# Save RDS file
 cat("\nSaving RDS file...\n")
 rds_output <- file.path(rds_dir, "pbmc_1k.rds")
 
