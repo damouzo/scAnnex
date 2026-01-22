@@ -32,6 +32,16 @@ From raw counts to insights.
 
 ---
 
+## Demo
+
+*Complete walkthrough: QC metrics, clustering, gene expression, and custom annotations.*
+
+**[▶️ Watch Demo Video](https://github.com/damouzo/scAnnex/releases/tag/v0.2.0)**
+
+
+
+---
+
 ## What it does
 
 scAnnex automates the complete workflow for single-cell RNA-seq analysis:
@@ -43,46 +53,7 @@ scAnnex automates the complete workflow for single-cell RNA-seq analysis:
 - **Clustering** — Multi-resolution Leiden clustering
 - **Cell Annotation** — CellTypist integration with automatic model download
 - **Interactive Dashboard** — Real-time exploration with R Shiny
-
-<div align="center">
-  <img src="docs/images/QC_overview.png" alt="scAnnex Dashboard" width="800"/>
-  <p><i>Interactive dashboard for real-time data exploration</i></p>
-</div>
-
----
-
-## Requirements
-
-### Software Versions
-
-scAnnex has been tested with:
-
-- **Nextflow** ≥23.04.0
-- **Python** 3.11
-- **anndata** 0.12.7
-- **scanpy** 1.11.5
-- **R** ≥4.0 (for dashboard)
-
-### Conda Environments
-
-Two conda environments are used:
-
-1. **scannex** (pipeline): Processing and analysis
-2. **scannex-dashboard** (dashboard): Interactive visualization
-
-Both environments use compatible versions of Python, anndata, and scanpy to ensure seamless data transfer between pipeline and dashboard.
-
-### System Requirements
-
-**Minimum:**
-- 8 GB RAM (for small datasets <10k cells)
-- 4 CPU cores
-- 20 GB disk space
-
-**Recommended:**
-- 32 GB RAM (for datasets 10k-100k cells)
-- 8+ CPU cores
-- 100 GB disk space
+- **Annotation Station** — Define cell types your way with rule-based annotation
 
 ---
 
@@ -90,34 +61,22 @@ Both environments use compatible versions of Python, anndata, and scanpy to ensu
 
 ### Installation
 
-Install Nextflow:
 ```bash
+# Install Nextflow:
 curl -s https://get.nextflow.io | bash
 sudo mv nextflow /usr/local/bin/
 ```
 
 ### Test with Demo Data
 
-Try scAnnex with included demo data:
 
 ```bash
-nextflow run main.nf \
-  -profile test,docker \
-  --outdir test_results
-```
-
-Or test specific input formats:
-```bash
-# H5AD format
-nextflow run main.nf --input data_demo/H5AD/samplesheet.csv --outdir results -profile conda
-
 # 10x MTX format
 nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results -profile conda
 ```
 
 ### Run with Your Data
 
-Process your data in one command:
 
 ```bash
 nextflow run main.nf \
@@ -126,8 +85,6 @@ nextflow run main.nf \
   --outdir results \
   --max_memory '8.GB'
 ```
-
-**Note:** Use `-profile conda` for local systems with conda/mamba, or `-profile docker`/`singularity` for containers.
 
 **Samplesheet format** (`samplesheet.csv`):
 ```csv
@@ -157,15 +114,6 @@ Choose the right execution profile for your environment:
 | **docker** | Local machines | `-profile docker` |
 | **singularity** | HPC clusters | `-profile singularity` |
 
-**For laptops** with limited RAM:
-```bash
-nextflow run main.nf -profile wave --max_memory '8.GB'
-```
-
-**For HPC** with plenty of resources:
-```bash
-nextflow run main.nf -profile wave --max_memory '120.GB'
-```
 
 > Memory allocation adapts automatically. Processes use 60-75% of `--max_memory` to prevent failures.
 
@@ -210,58 +158,38 @@ nextflow run main.nf -profile wave --max_memory '120.GB'
 
 ---
 
-## Dashboard
+# Dashboard
 
-The interactive dashboard provides real-time exploration of your results.
+Explore your data in real time. No coding required.
 
-**Features:**
-- Quality control metrics visualization
-- Interactive UMAP plots with WebGL acceleration
-- Gene expression overlay
-- Cell type composition analysis
-- Export-ready plots
+**Quality Control**
+- Visualize metrics across all samples
+- Identify filtering thresholds
+- Track cell attrition
 
-**Launch:**
-```bash
-cd dashboard
-bash launch_dashboard.sh ../results
-```
+![QC Example](docs/images/dashboard_qc.gif)
 
-The launcher handles environment setup automatically on first run (~5-10 min, one-time only).
+**Clustering & UMAP**
+- Interactive scatter plots with WebGL
+- Color by any metadata or clustering
+- Zoom, pan, export
 
-**Requirements:**
-- R 4.3+ with Shiny
-- Python 3.10+ with scanpy, anndata
+![Clustering Example](docs/images/dashboard_clustering.gif)
 
-All dependencies installed automatically via conda.
+**Gene Expression**
+- Search any gene
+- Overlay expression on UMAP
+- See distribution instantly
 
----
+![Gene Expression Example](docs/images/dashboard_expression.gif)
 
-## Output Structure
+**Annotation Station**
+- Define cell types with simple rules
+- Combine clustering and auto-annotations
+- Preview changes in real time
+- Save annotations directly to H5AD
 
-```
-results/
-├── unified_input/
-│   └── sample_unified.h5ad          # Standardized input
-├── qc/
-│   ├── sample_qc.h5ad                # QC-filtered data
-│   └── qc_results/
-│       ├── qc_report.json            # QC metrics
-│       ├── qc_before_violin.png      # Pre-filtering plots
-│       └── cell_attrition_log.csv    # Filtering summary
-├── doublet_detection/
-│   ├── sample_doublets.h5ad          # Doublet scores
-│   └── doublet_scores.csv
-├── normalized/
-│   └── sample_processed.h5ad         # Normalized + clustered
-├── annotation/
-│   ├── sample_annotated.h5ad         # Final annotated data
-│   └── sample_celltypist.csv         # Cell type predictions
-└── pipeline_info/
-    ├── execution_report.html
-    ├── execution_timeline.html
-    └── pipeline_dag.html
-```
+![Annotation Example](docs/images/dashboard_annotation.gif)
 
 ---
 
@@ -321,13 +249,39 @@ nextflow run main.nf \
 
 ---
 
-## Documentation
 
-- **[Getting Started](docs/GETTING_STARTED.md)** — Installation and first run
-- **[Testing Guide](docs/TESTING.md)** — Demo data and testing workflows
-- **[Execution Profiles](docs/EXECUTION_PROFILES.md)** — Profile comparison and troubleshooting
-- **[Dashboard Usage](docs/DASHBOARD_USAGE.md)** — Interactive visualization guide
-- **[Troubleshooting](docs/Troubleshooting.md)** — Common issues and solutions
+## Requirements
+
+### Software Versions
+
+scAnnex has been tested with:
+
+- **Nextflow** ≥23.04.0
+- **Python** 3.11
+- **anndata** 0.12.7
+- **scanpy** 1.11.5
+- **R** ≥4.0 (for dashboard)
+
+### Conda Environments
+
+Two conda environments are used:
+
+1. **scannex** (pipeline): Processing and analysis
+2. **scannex-dashboard** (dashboard): Interactive visualization
+
+Both environments use compatible versions of Python, anndata, and scanpy to ensure seamless data transfer between pipeline and dashboard.
+
+### System Requirements
+
+**Minimum:**
+- 8 GB RAM (for small datasets <10k cells)
+- 4 CPU cores
+- 20 GB disk space
+
+**Recommended:**
+- 32 GB RAM (for datasets 10k-100k cells)
+- 8+ CPU cores
+- 100 GB disk space
 
 ---
 
