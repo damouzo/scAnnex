@@ -2,7 +2,7 @@ process UNIFY_INPUT {
     tag "$meta.id"
     label 'process_low'
 
-    conda "conda-forge::scanpy>=1.9 conda-forge::scipy conda-forge::r-base>=4.0 conda-forge::r-seurat conda-forge::r-matrix"
+    conda "\"scanpy>=1.9\" \"scipy\" \"r-base>=4.0\" \"r-seurat\" \"r-matrix\""
     container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
 
     input:

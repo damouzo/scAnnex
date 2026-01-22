@@ -16,7 +16,8 @@ This directory contains demo datasets in multiple formats for testing the scAnne
 ```bash
 nextflow run main.nf \
   --input data_demo/H5AD/samplesheet.csv \
-  --outdir results_h5ad
+  --outdir results_h5ad \
+  -profile conda
 ```
 
 ### Test with 10xMTX format
@@ -24,24 +25,28 @@ nextflow run main.nf \
 ```bash
 nextflow run main.nf \
   --input data_demo/10xMTX/samplesheet.csv \
-  --outdir results_mtx
+  --outdir results_mtx \
+  -profile conda
 ```
 
 ### Test with RDS format
 
 First, generate the RDS file (requires R + Seurat):
 ```bash
-cd data_demo
+cd data_demo/RDS
 Rscript generate_rds.R
-cd ..
+cd ../..
 ```
 
 Then run the pipeline:
 ```bash
 nextflow run main.nf \
   --input data_demo/RDS/samplesheet.csv \
-  --outdir results_rds
+  --outdir results_rds \
+  -profile conda
 ```
+
+**Note:** Always include `-profile conda` (or `docker`/`singularity`) to ensure dependencies are available.
 
 ## Samplesheet Format
 

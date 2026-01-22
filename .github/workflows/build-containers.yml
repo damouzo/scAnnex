@@ -91,10 +91,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push to Sylabs Cloud (optional)
-        if: github.event_name == 'release' && secrets.SYLABS_TOKEN != ''
+        if: github.event_name == 'release'
         env:
           SYLABS_TOKEN: ${{ secrets.SYLABS_TOKEN }}
         run: |
-          echo "$SYLABS_TOKEN" | apptainer remote login
-          apptainer push dashboard/scannex-dashboard.sif library://yourusername/scannex/dashboard:latest
-          apptainer push dashboard/scannex-dashboard.sif library://yourusername/scannex/dashboard:${GITHUB_REF_NAME}
+          # Only push if SYLABS_TOKEN is configured
+          if [ -n "$SYLABS_TOKEN" ]; then
+            echo "$SYLABS_TOKEN" | apptainer remote login
+            apptainer push dashboard/scannex-dashboard.sif library://yourusername/scannex/dashboard:latest
+            apptainer push dashboard/scannex-dashboard.sif library://yourusername/scannex/dashboard:${GITHUB_REF_NAME}
+          else
+            echo "SYLABS_TOKEN not configured, skipping Sylabs Cloud upload"
+          fi

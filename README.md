@@ -74,10 +74,10 @@ nextflow run main.nf \
 Or test specific input formats:
 ```bash
 # H5AD format
-nextflow run main.nf --input data_demo/H5AD/samplesheet.csv --outdir results
+nextflow run main.nf --input data_demo/H5AD/samplesheet.csv --outdir results -profile conda
 
 # 10x MTX format
-nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results
+nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results -profile conda
 ```
 
 ### Run with Your Data
@@ -86,11 +86,13 @@ Process your data in one command:
 
 ```bash
 nextflow run main.nf \
-  -profile wave \
+  -profile conda \
   --input samplesheet.csv \
   --outdir results \
   --max_memory '8.GB'
 ```
+
+**Note:** Use `-profile conda` for local systems with conda/mamba, or `-profile docker`/`singularity` for containers.
 
 **Samplesheet format** (`samplesheet.csv`):
 ```csv

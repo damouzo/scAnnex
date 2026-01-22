@@ -29,10 +29,13 @@ No installation needed. Use `-profile docker` when running the pipeline.
 ```bash
 nextflow run main.nf \
   --input data_demo/H5AD/samplesheet.csv \
-  --outdir results
+  --outdir results \
+  -profile conda
 ```
 
 That's it. Your analysis runs automatically.
+
+**Important:** Always use `-profile conda` (or `docker`/`singularity`) to ensure dependencies are available.
 
 ## Input Formats
 
@@ -144,10 +147,9 @@ Open your browser to `http://localhost:3838`
 
 ## Next Steps
 
-- **Test your data**: See `docs/TESTING.md`
-- **Configure execution**: See `docs/EXECUTION_PROFILES.md`
-- **Use the dashboard**: See `docs/DASHBOARD_USAGE.md`
-- **HPC deployment**: See `docs/SINGULARITY_SETUP.md`
+- **Advanced configuration**: See `docs/CONFIGURATION.md`
+- **Test your data**: Try different input formats in `data_demo/`
+- **Use the dashboard**: Launch with `dashboard/launch_dashboard.sh`
 
 ## Requirements
 
