@@ -55,7 +55,6 @@ scAnnex automates the complete workflow for single-cell RNA-seq analysis:
 - **Interactive Dashboard** — Real-time exploration with R Shiny
 - **Annotation Station** — Define cell types your way with rule-based annotation
 
----
 
 ## Quick Start
 
@@ -167,21 +166,21 @@ Explore your data in real time. No coding required.
 - Identify filtering thresholds
 - Track cell attrition
 
-![QC Example](docs/images/dashboard_qc.gif)
+![QC Overview](docs/images/QC_overview.png)
 
 **Clustering & UMAP**
 - Interactive scatter plots with WebGL
 - Color by any metadata or clustering
 - Zoom, pan, export
 
-![Clustering Example](docs/images/dashboard_clustering.gif)
+![Clustering](docs/images/Clustering.png)
 
 **Gene Expression**
 - Search any gene
 - Overlay expression on UMAP
 - See distribution instantly
 
-![Gene Expression Example](docs/images/dashboard_expression.gif)
+![Gene Expression](docs/images/Gene_Expression.png)
 
 **Annotation Station**
 - Define cell types with simple rules
@@ -189,7 +188,7 @@ Explore your data in real time. No coding required.
 - Preview changes in real time
 - Save annotations directly to H5AD
 
-![Annotation Example](docs/images/dashboard_annotation.gif)
+![Annotation Station](docs/images/Annotation_Station.png)
 
 ---
 
@@ -235,68 +234,19 @@ nextflow run main.nf \
   -process.queue normal
 ```
 
-### Resume from Checkpoint
 
-Continue a failed or interrupted run:
-
-```bash
-nextflow run main.nf \
-  -profile wave \
-  --input samplesheet.csv \
-  --outdir results \
-  -resume
-```
-
----
-
-
-## Requirements
-
-### Software Versions
-
-scAnnex has been tested with:
-
-- **Nextflow** ≥23.04.0
-- **Python** 3.11
-- **anndata** 0.12.7
-- **scanpy** 1.11.5
-- **R** ≥4.0 (for dashboard)
-
-### Conda Environments
-
-Two conda environments are used:
-
-1. **scannex** (pipeline): Processing and analysis
-2. **scannex-dashboard** (dashboard): Interactive visualization
-
-Both environments use compatible versions of Python, anndata, and scanpy to ensure seamless data transfer between pipeline and dashboard.
-
-### System Requirements
-
-**Minimum:**
-- 8 GB RAM (for small datasets <10k cells)
-- 4 CPU cores
-- 20 GB disk space
-
-**Recommended:**
-- 32 GB RAM (for datasets 10k-100k cells)
-- 8+ CPU cores
-- 100 GB disk space
-
----
 
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
 
----
+
 
 ## Citation
 
-If you use scAnnex in your research, please cite:
 
 ```
 scAnnex: Automated Nextflow pipeline for single-cell RNA-seq analysis. https://github.com/damouzo/scAnnex
 ```
 
----
+
