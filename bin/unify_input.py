@@ -33,6 +33,9 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
+# Enable writing of nullable strings (required for anndata >= 0.11)
+ad.settings.allow_write_nullable_strings = True
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

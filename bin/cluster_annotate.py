@@ -7,6 +7,10 @@ import argparse
 import scanpy as sc
 import pandas as pd
 import matplotlib.pyplot as plt
+import anndata as ad
+
+# Enable writing of nullable strings (required for anndata >= 0.11)
+ad.settings.allow_write_nullable_strings = True
 
 
 def parse_args():

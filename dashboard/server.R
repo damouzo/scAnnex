@@ -571,4 +571,258 @@ server <- function(input, output, session) {
     })
   })
   
+  # ===========================================================================
+  # TAB 5: ANNOTATION STATION
+  # ===========================================================================
+  
+  # Reactive value to store custom annotation
+  rv_annotation <- reactiveValues(
+    labels = NULL,
+    annotation_name = NULL,
+    rules_df = NULL
+  )
+  
+  # Plot custom annotation button
+  observeEvent(input$btn_plot_annotation, {
+    
+    req(rv$data_loaded)
+    req(input$annot_name)
+    req(input$annot_rules)
+    
+    isolate({
+      
+      tryCatch({
+        
+        # Parse annotation rules
+        rules_df <- parse_annotation_rules(input$annot_rules)
+        
+        if (nrow(rules_df) == 0) {
+          showNotification(
+            "No valid annotation rules found. Please check your input format.",
+            type = "warning",
+            duration = 5
+          )
+          return(NULL)
+        }
+        
+        # Apply custom annotation
+        labels <- apply_custom_annotation(
+          metadata = rv$data_obj$metadata,
+          rules_df = rules_df,
+          annotation_name = input$annot_name
+        )
+        
+        # Store in reactive values
+        rv_annotation$labels <- labels
+        rv_annotation$annotation_name <- input$annot_name
+        rv_annotation$rules_df <- rules_df
+        
+        showNotification(
+          sprintf("Custom annotation '%s' created successfully!", input$annot_name),
+          type = "message",
+          duration = 3
+        )
+        
+      }, error = function(e) {
+        showNotification(
+          paste("Error creating annotation:", e$message),
+          type = "error",
+          duration = 5
+        )
+        rv_annotation$labels <- NULL
+      })
+    })
+  })
+  
+  # Render annotation UMAP
+  output$annotation_umap <- renderPlotly({
+    req(rv$data_loaded)
+    req(rv$data_obj$umap_coords)
+    
+    # Check if we have custom annotation labels, otherwise show all as "Unknown"
+    if (!is.null(rv_annotation$labels)) {
+      # Use custom annotation labels
+      umap_data <- rv$data_obj$umap_coords
+      umap_data$annotation <- rv_annotation$labels[umap_data$cell_id]
+      plot_title <- sprintf("Custom Annotation: %s", rv_annotation$annotation_name)
+    } else {
+      # Show all cells as "Unknown" by default
+      umap_data <- rv$data_obj$umap_coords
+      umap_data$annotation <- "Unknown"
+      plot_title <- "Custom Annotation (all cells marked as Unknown)"
+    }
+    
+    # Create plot
+    p <- plot_ly(
+      data = umap_data,
+      x = ~UMAP_1,
+      y = ~UMAP_2,
+      type = 'scattergl',
+      mode = 'markers',
+      marker = list(
+        size = input$annot_point_size,
+        opacity = input$annot_opacity
+      ),
+      color = ~annotation,
+      text = ~paste("Cell:", cell_id, "<br>Label:", annotation),
+      hoverinfo = 'text'
+    ) %>%
+      layout(
+        title = plot_title,
+        xaxis = list(title = "UMAP 1"),
+        yaxis = list(title = "UMAP 2"),
+        hovermode = 'closest'
+      )
+    
+    return(p)
+  })
+  
+  # Render annotation statistics
+  output$annotation_stats <- renderText({
+    
+    # Show initial message if no annotation has been created
+    if (is.null(rv_annotation$labels)) {
+      if (!rv$data_loaded) {
+        return("Load data first to start creating custom annotations.")
+      } else {
+        n_total <- nrow(rv$data_obj$metadata)
+        return(sprintf(
+          "Ready to annotate\n\nTotal cells: %s\n\nEnter annotation rules above and click 'Plot' to create a custom annotation.",
+          format_number(n_total)
+        ))
+      }
+    }
+    
+    # Calculate statistics
+    label_counts <- table(rv_annotation$labels)
+    n_total <- length(rv_annotation$labels)
+    n_unknown <- sum(rv_annotation$labels == "Unknown")
+    n_annotated <- n_total - n_unknown
+    
+    # Calculate percentages for each label
+    label_percentages <- (label_counts / n_total) * 100
+    
+    # Format label distribution with counts and percentages
+    label_dist_text <- paste(
+      sprintf("  %s: %s (%.1f%%)", 
+              names(label_counts), 
+              format_number(label_counts),
+              label_percentages),
+      collapse = "\n"
+    )
+    
+    # Format output
+    stats_text <- sprintf(
+      "Annotation: %s\n\nTotal cells: %s\nAnnotated: %s (%.1f%%)\nUnknown: %s (%.1f%%)\nUnique labels: %d\n\nLabel distribution:\n%s",
+      rv_annotation$annotation_name,
+      format_number(n_total),
+      format_number(n_annotated),
+      100 * n_annotated / n_total,
+      format_number(n_unknown),
+      100 * n_unknown / n_total,
+      length(unique(rv_annotation$labels)),
+      label_dist_text
+    )
+    
+    return(stats_text)
+  })
+  
+  # Save annotation to H5AD button
+  observeEvent(input$btn_save_annotation, {
+    
+    req(rv_annotation$labels)
+    req(rv$data_obj)
+    req(input$input_h5ad_path)
+    
+    isolate({
+      
+      withProgress(message = 'Saving annotation...', value = 0, {
+        
+        tryCatch({
+          
+          incProgress(0.3, detail = "Preparing to save...")
+          
+          # Determine save mode
+          create_copy <- (input$annot_save_mode == "create_copy")
+          
+          incProgress(0.3, detail = "Writing to H5AD...")
+          
+          # Save annotation
+          output_path <- save_annotation_to_h5ad(
+            h5ad_path = input$input_h5ad_path,
+            annotation_name = rv_annotation$annotation_name,
+            labels = rv_annotation$labels,
+            output_path = NULL,
+            create_copy = create_copy
+          )
+          
+          incProgress(0.4, detail = "Done!")
+          
+          # Show success message
+          msg <- if (create_copy) {
+            sprintf("Annotation saved to new file:\n%s", basename(output_path))
+          } else {
+            sprintf("Annotation saved to original file:\n%s", basename(output_path))
+          }
+          
+          showNotification(
+            msg,
+            type = "message",
+            duration = 10
+          )
+          
+          # If we created a copy, ask if user wants to reload
+          if (create_copy) {
+            showNotification(
+              "Tip: You can reload the new file from the Data Input tab to see the saved annotation.",
+              type = "message",
+              duration = 10
+            )
+          } else {
+            # If we overwrote, reload the data
+            showNotification(
+              "Reloading data with new annotation...",
+              type = "message",
+              duration = 3
+            )
+            
+            # Trigger data reload
+            Sys.sleep(1)
+            
+            rv$data_obj <- load_h5ad_data(
+              input$input_h5ad_path,
+              backed = input$input_backed_mode
+            )
+            
+            # Update color choices
+            rv$umap_color_choices <- setdiff(
+              names(rv$data_obj$metadata),
+              c("cell_id")
+            )
+            
+            updateSelectInput(
+              session,
+              "umap_color_by",
+              choices = rv$umap_color_choices,
+              selected = if(rv_annotation$annotation_name %in% rv$umap_color_choices) {
+                rv_annotation$annotation_name
+              } else if("batch" %in% rv$umap_color_choices) {
+                "batch"
+              } else {
+                rv$umap_color_choices[1]
+              }
+            )
+          }
+          
+        }, error = function(e) {
+          showNotification(
+            paste("Error saving annotation:", e$message),
+            type = "error",
+            duration = 10
+          )
+        })
+      })
+    })
+  })
+  
 }

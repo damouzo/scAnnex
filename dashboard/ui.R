@@ -46,6 +46,12 @@ ui <- dashboardPage(
       ),
       
       menuItem(
+        "Annotation Station",
+        tabName = "tab_annotation",
+        icon = icon("tags")
+      ),
+      
+      menuItem(
         "About",
         tabName = "tab_about",
         icon = icon("info-circle")
@@ -249,7 +255,7 @@ ui <- dashboardPage(
               "Point size:",
               min = 1,
               max = 10,
-              value = 3,
+              value = 5,
               step = 0.5
             ),
             
@@ -258,7 +264,7 @@ ui <- dashboardPage(
               "Opacity:",
               min = 0.1,
               max = 1,
-              value = 0.7,
+              value = 1,
               step = 0.1
             )
           ),
@@ -336,7 +342,120 @@ ui <- dashboardPage(
       ),
       
       # ========================================================================
-      # TAB 5: About
+      # TAB 5: Annotation Station
+      # ========================================================================
+      tabItem(
+        tabName = "tab_annotation",
+        
+        h2("Annotation Station"),
+        
+        fluidRow(
+          box(
+            title = "Annotation Controls",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 3,
+            
+            textInput(
+              "annot_name",
+              "Annotation Name:",
+              value = "custom_annotation",
+              placeholder = "e.g., custom_first_annot"
+            ),
+            
+            hr(),
+            
+            textAreaInput(
+              "annot_rules",
+              "Annotation Rules:",
+              placeholder = "leiden_0.5,4,HSC\nleiden_0.5,2,T cells\nleiden_1.0,0,Monocytes",
+              rows = 10,
+              width = "100%"
+            ),
+            
+            helpText(
+              "Format: clustering_name,cluster_id,label",
+              br(),
+              "One rule per line. Later rules override earlier ones."
+            ),
+            
+            hr(),
+            
+            h5("Visualization Settings"),
+            
+            selectInput(
+              "annot_umap_select",
+              "Select UMAP:",
+              choices = c("X_umap"),
+              selected = "X_umap"
+            ),
+            
+            sliderInput(
+              "annot_point_size",
+              "Point size:",
+              min = 1,
+              max = 10,
+              value = 5,
+              step = 0.5
+            ),
+            
+            sliderInput(
+              "annot_opacity",
+              "Opacity:",
+              min = 0.1,
+              max = 1,
+              value = 1,
+              step = 0.1
+            ),
+            
+            hr(),
+            
+            actionButton(
+              "btn_plot_annotation",
+              "Plot",
+              icon = icon("chart-area"),
+              class = "btn-primary btn-block"
+            ),
+            
+            br(),
+            
+            actionButton(
+              "btn_save_annotation",
+              "Save in Object",
+              icon = icon("save"),
+              class = "btn-success btn-block"
+            ),
+            
+            br(),
+            
+            radioButtons(
+              "annot_save_mode",
+              "Save mode:",
+              choices = c(
+                "Overwrite original" = "overwrite",
+                "Create new version" = "create_copy"
+              ),
+              selected = "create_copy"
+            )
+          ),
+          
+          box(
+            title = "Custom Annotation UMAP",
+            status = "info",
+            solidHeader = TRUE,
+            width = 9,
+            
+            plotlyOutput("annotation_umap", height = "600px"),
+            
+            br(),
+            
+            verbatimTextOutput("annotation_stats")
+          )
+        )
+      ),
+      
+      # ========================================================================
+      # TAB 6: About
       # ========================================================================
       tabItem(
         tabName = "tab_about",
@@ -362,8 +481,10 @@ ui <- dashboardPage(
               <ul>
                 <li><strong>Quality Control Overview:</strong> Interactive QC metrics, thresholds tables, and before/after filtering plots</li>
                 <li><strong>UMAP Visualization:</strong> Interactive exploration with customizable coloring by metadata (batch, sample, condition, etc.)</li>
+                <li><strong>Automatic Cell-Type Annotation:</strong> Visualize CellTypist auto-annotations in the Clustering & UMAP tab</li>
                 <li><strong>Gene Expression:</strong> Single gene expression visualization on UMAP</li>
                 <li><strong>Gene Set Scoring:</strong> Calculate and visualize gene signature scores (0-1 normalized scale)</li>
+                <li><strong>Annotation Station:</strong> Create custom cell-type annotations by assigning labels to clusters, with real-time visualization and H5AD export</li>
                 <li><strong>Metadata Export:</strong> Filter and download cell metadata as CSV or Excel</li>
                 <li><strong>Auto-Detection:</strong> Automatically finds H5AD and QC files in results directory</li>
               </ul>

@@ -10,6 +10,10 @@ from pathlib import Path
 try:
     import scanpy as sc
     import pandas as pd
+    import anndata as ad
+    
+    # Enable writing of nullable strings (required for anndata >= 0.11)
+    ad.settings.allow_write_nullable_strings = True
 except ImportError as e:
     print(f"ERROR: Missing required package: {e}")
     print("Please install: pip install scanpy pandas")

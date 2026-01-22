@@ -51,6 +51,41 @@ scAnnex automates the complete workflow for single-cell RNA-seq analysis:
 
 ---
 
+## Requirements
+
+### Software Versions
+
+scAnnex has been tested with:
+
+- **Nextflow** ≥23.04.0
+- **Python** 3.11
+- **anndata** 0.12.7
+- **scanpy** 1.11.5
+- **R** ≥4.0 (for dashboard)
+
+### Conda Environments
+
+Two conda environments are used:
+
+1. **scannex** (pipeline): Processing and analysis
+2. **scannex-dashboard** (dashboard): Interactive visualization
+
+Both environments use compatible versions of Python, anndata, and scanpy to ensure seamless data transfer between pipeline and dashboard.
+
+### System Requirements
+
+**Minimum:**
+- 8 GB RAM (for small datasets <10k cells)
+- 4 CPU cores
+- 20 GB disk space
+
+**Recommended:**
+- 32 GB RAM (for datasets 10k-100k cells)
+- 8+ CPU cores
+- 100 GB disk space
+
+---
+
 ## Quick Start
 
 ### Installation

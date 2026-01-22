@@ -29,6 +29,10 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+import anndata as ad
+
+# Enable writing of nullable strings (required for anndata >= 0.11)
+ad.settings.allow_write_nullable_strings = True
 
 # Configure logging
 logging.basicConfig(
@@ -318,10 +322,10 @@ def calculate_qc_metrics(adata: sc.AnnData) -> sc.AnnData:
     """
     logger.info("Calculating comprehensive QC metrics...")
     
-    # Identify gene sets
-    adata.var['mt'] = adata.var_names.str.startswith('MT-')
-    adata.var['ribo'] = adata.var_names.str.match('^RP[SL]')
-    adata.var['hb'] = adata.var_names.str.contains('^HB[^(P)]')
+    # Identify gene sets (convert to numpy bool to avoid pandas BooleanArray issues)
+    adata.var['mt'] = adata.var_names.str.startswith('MT-').to_numpy(dtype=bool)
+    adata.var['ribo'] = adata.var_names.str.match('^RP[SL]').to_numpy(dtype=bool)
+    adata.var['hb'] = adata.var_names.str.contains('^HB[^(P)]').to_numpy(dtype=bool)
     
     # Log gene set sizes
     n_mt = adata.var['mt'].sum()

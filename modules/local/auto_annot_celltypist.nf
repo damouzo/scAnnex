@@ -25,17 +25,14 @@ process AUTO_ANNOT_CELLTYPIST {
     def majority_voting = params.celltypist_majority_voting ? '--majority-voting' : ''
     
     """
-    # Run CellTypist annotation
+    # Run CellTypist annotation and save to H5AD
     auto_annot_celltypist.py \\
         --input ${h5ad} \\
         --output ${prefix}_celltypist.csv \\
+        --output-h5ad ${prefix}_annotated.h5ad \\
         --model ${model} \\
         ${majority_voting} \\
         ${args}
-    
-    # Copy input H5AD as annotated output (annotations are in CSV)
-    # In future, we can merge annotations back into H5AD
-    cp ${h5ad} ${prefix}_annotated.h5ad
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

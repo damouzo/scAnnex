@@ -10,6 +10,10 @@ import scrublet as scr
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import anndata as ad
+
+# Enable writing of nullable strings (required for anndata >= 0.11)
+ad.settings.allow_write_nullable_strings = True
 
 
 def parse_args():

@@ -35,6 +35,10 @@ import pandas as pd
 import scanpy as sc
 import celltypist
 from celltypist import models
+import anndata as ad
+
+# Enable writing of nullable strings (required for anndata >= 0.11)
+ad.settings.allow_write_nullable_strings = True
 
 warnings.filterwarnings('ignore')
 
@@ -72,6 +76,12 @@ Examples:
         type=str,
         required=True,
         help="Output CSV file (cell_id, label, score, tool)"
+    )
+    parser.add_argument(
+        "--output-h5ad",
+        type=str,
+        default=None,
+        help="Output H5AD file with annotations added to .obs (optional)"
     )
     
     # Model selection
@@ -273,6 +283,25 @@ def save_results(cell_ids, labels, scores, output_path):
     return results_df
 
 
+def save_h5ad_with_annotations(adata, labels, scores, output_h5ad_path):
+    """Save H5AD file with CellTypist annotations added to .obs."""
+    print(f"\nAdding CellTypist annotations to H5AD...")
+    
+    # Add annotations to .obs
+    adata.obs['auto_annot_celltypist'] = labels.values
+    adata.obs['auto_annot_celltypist_score'] = scores.values
+    
+    print(f"  Added columns to .obs:")
+    print(f"    - auto_annot_celltypist: cell type labels")
+    print(f"    - auto_annot_celltypist_score: confidence scores")
+    
+    # Save annotated H5AD
+    print(f"\nSaving annotated H5AD to: {output_h5ad_path}")
+    adata.write_h5ad(output_h5ad_path)
+    
+    print(f"  Successfully saved annotated H5AD")
+
+
 def main():
     """Main execution function."""
     args = parse_args()
@@ -287,7 +316,12 @@ def main():
     print("="*60)
     
     # Step 1: Load data
-    adata = load_data(args.input, backed=args.backed)
+    # Force backed=False if we need to save to H5AD (backed mode is read-only)
+    use_backed = args.backed and not args.output_h5ad
+    if args.output_h5ad and args.backed:
+        print("  Note: Disabling backed mode because --output-h5ad requires write access")
+    
+    adata = load_data(args.input, backed=use_backed)
     
     # Step 2: Load model
     model = load_model(args.model, download=args.download_model)
@@ -308,6 +342,15 @@ def main():
         scores=scores,
         output_path=args.output
     )
+    
+    # Step 5: Save annotated H5AD if requested
+    if args.output_h5ad:
+        save_h5ad_with_annotations(
+            adata=adata,
+            labels=labels,
+            scores=scores,
+            output_h5ad_path=args.output_h5ad
+        )
     
     print("\n" + "="*60)
     print("CellTypist annotation completed successfully!")
