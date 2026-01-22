@@ -36,7 +36,7 @@ From raw counts to insights.
 
 *Complete walkthrough: QC metrics, clustering, gene expression, and custom annotations.*
 
-**[▶️ Watch Demo Video](https://github.com/damouzo/scAnnex/releases/tag/v0.2.0)**
+**<a href="https://github.com/damouzo/scAnnex/releases/tag/v0.2.0" target="_blank">▶️ Watch Demo Video</a>**
 
 
 
