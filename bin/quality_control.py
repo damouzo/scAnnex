@@ -323,9 +323,9 @@ def calculate_qc_metrics(adata: sc.AnnData) -> sc.AnnData:
     logger.info("Calculating comprehensive QC metrics...")
     
     # Identify gene sets (convert to numpy bool to avoid pandas BooleanArray issues)
-    adata.var['mt'] = adata.var_names.str.startswith('MT-').to_numpy(dtype=bool)
-    adata.var['ribo'] = adata.var_names.str.match('^RP[SL]').to_numpy(dtype=bool)
-    adata.var['hb'] = adata.var_names.str.contains('^HB[^(P)]').to_numpy(dtype=bool)
+    adata.var['mt'] = adata.var_names.str.startswith('MT-')
+    adata.var['ribo'] = adata.var_names.str.match('^RP[SL]')
+    adata.var['hb'] = adata.var_names.str.contains('^HB[^(P)]')
     
     # Log gene set sizes
     n_mt = adata.var['mt'].sum()
