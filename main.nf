@@ -44,6 +44,50 @@ workflow {
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    COMPLETION HANDLER
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
+workflow.onComplete {
+    if (workflow.success && params.enable_dashboard) {
+        // Calculate absolute results path
+        def results_path = params.outdir.startsWith('/') ? params.outdir : "${workflow.launchDir}/${params.outdir}"
+        def dashboard_dir = "${workflow.projectDir}/dashboard"
+        def port = params.dashboard_port ?: 3838
+        def host = params.dashboard_host ?: 'localhost'
+        
+        log.info ""
+        log.info "════════════════════════════════════════════════════════════════"
+        log.info " Pipeline Completed Successfully"
+        log.info "════════════════════════════════════════════════════════════════"
+        log.info ""
+        log.info "Results saved to: ${results_path}"
+        log.info ""
+        log.info "────────────────────────────────────────────────────────────────"
+        log.info " Interactive Dashboard Available"
+        log.info "────────────────────────────────────────────────────────────────"
+        log.info ""
+        log.info "The dashboard environment is ready. To launch it, run:"
+        log.info ""
+        log.info "  cd ${dashboard_dir}"
+        log.info "  bash launch_dashboard.sh ${results_path}"
+        log.info ""
+        log.info "Once started, access the dashboard at:"
+        log.info "  http://${host}:${port}"
+        log.info ""
+        log.info "The dashboard allows you to:"
+        log.info "  - Explore QC metrics and visualizations"
+        log.info "  - Review automated cell type annotations"
+        log.info "  - Manually curate and refine annotations"
+        log.info "  - Export curated results"
+        log.info ""
+        log.info "════════════════════════════════════════════════════════════════"
+        log.info ""
+    }
+}
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     THE END
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
