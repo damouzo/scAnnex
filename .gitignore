@@ -103,8 +103,6 @@ start_docker.sh
 test_wave_profile.sh
 verify_docker_setup.sh
 
-# Nextflow conda artifacts (bash redirection misinterpretation)
-/=*
-
-# Internal documentation (development notes, not for public repo)
+# Internal documentation
 docs/internal/
+AGENTS.md

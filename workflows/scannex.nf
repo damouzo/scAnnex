@@ -26,7 +26,7 @@ workflow SCANNEX {
     def input_ch
     if (params.input.endsWith('.csv') || params.input.endsWith('.tsv')) {
         // CSV/TSV samplesheet with multiple samples
-        input_ch = Channel
+        input_ch = channel
             .fromPath(params.input, checkIfExists: true)
             .splitCsv(header: true, sep: params.input.endsWith('.tsv') ? '\t' : ',')
             .map { row ->
@@ -40,7 +40,7 @@ workflow SCANNEX {
             }
     } else {
         // Single file input (h5ad, rds, or mtx directory)
-        input_ch = Channel
+        input_ch = channel
             .fromPath(params.input, checkIfExists: true)
             .map { file ->
                 def meta = [
