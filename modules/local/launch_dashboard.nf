@@ -71,7 +71,7 @@ EOF
     echo "════════════════════════════════════════════════════════════════"
     echo " Interactive Dashboard Available"
     echo "════════════════════════════════════════════════════════════════"
-     echo ""
+    echo ""
     echo "  cd ${dashboard_dir}"
     echo "  bash launch_dashboard.sh ${results_path}"
     echo ""
