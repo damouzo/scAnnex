@@ -237,7 +237,27 @@ nextflow run main.nf \
   -process.queue normal
 ```
 
+### Generate Execution Reports
 
+Generate HTML reports for pipeline execution analysis:
+
+```bash
+nextflow run main.nf \
+  -profile conda \
+  --input samplesheet.csv \
+  --outdir results \
+  -with-report \
+  -with-timeline \
+  -with-dag
+```
+
+Reports will be saved to `results/pipeline_info/`:
+- `execution_report.html` - Resource usage and task statistics
+- `execution_timeline.html` - Visual timeline of task execution
+- `pipeline_dag.html` - Directed acyclic graph of workflow
+- `execution_trace.txt` - Detailed trace (always generated)
+
+---
 
 ## License
 
