@@ -3,7 +3,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     scAnnex: Single-Cell RNA-seq Analysis Pipeline
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Github : https://github.com/your-org/scannex
+    Github : https://github.com/damouzo/scAnnex
 ----------------------------------------------------------------------------------------
 */
 
@@ -39,7 +39,7 @@ workflow {
     validateParameters()
     
     // Run main workflow
-    SCANNEX ()
+    SCANNEX()
 }
 
 /*
