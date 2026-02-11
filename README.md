@@ -95,10 +95,13 @@ sample2,h5ad,data/sample2.h5ad,batch1,treated
 ### Launch the dashboard
 
 ```bash
+# 1. One-time setup (installs everything you need)
 cd dashboard
-bash launch_dashboard.sh ../results
-```
+./setup_dashboard.sh
 
+# 2. Launch dashboard
+./launch_dashboard.sh
+```
 
 ---
 

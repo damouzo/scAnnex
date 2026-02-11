@@ -114,8 +114,13 @@ workflow SCANNEX {
     // STEP 7: Launch Interactive Dashboard (Optional - enabled by default)
     //
     if (params.enable_dashboard) {
+        // Calculate absolute results path
+        def results_path = params.outdir.startsWith('/') ? params.outdir : "${workflow.launchDir}/${params.outdir}"
+        
         LAUNCH_DASHBOARD (
-            final_output.map { meta, h5ad -> h5ad }.first()
+            final_output.map { _meta, h5ad -> h5ad }.first(),
+            "${projectDir}/dashboard",
+            results_path
         )
     }
     

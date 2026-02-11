@@ -1,10 +1,12 @@
 process LAUNCH_DASHBOARD {
-    tag "Dashboard Ready"
+    tag "Dashboard Auto-Launch"
     label 'process_low'
     publishDir "${params.outdir}", mode: params.publish_dir_mode
 
     input:
     path(h5ad_file)
+    val(dashboard_dir)
+    val(results_path)
 
     output:
     path("dashboard_info.txt"), emit: info
@@ -15,8 +17,6 @@ process LAUNCH_DASHBOARD {
     script:
     def port = params.dashboard_port ?: 3838
     def host = params.dashboard_host ?: 'localhost'
-    // Convert relative path to absolute path for dashboard
-    def results_path = params.outdir.startsWith('/') ? params.outdir : "${launchDir}/${params.outdir}"
     """
     # Save dashboard info
     cat > dashboard_info.txt << EOF
@@ -27,45 +27,49 @@ Dashboard Port: ${port}
 Dashboard Host: ${host}
 Dashboard URL: http://${host}:${port}
 
-Launch Command:
-  cd ${projectDir}/dashboard
-  bash launch_dashboard.sh ${results_path}
+Auto-launched: Yes
+Launch time: \$(date)
 
-Or with R directly:
-  cd ${projectDir}/dashboard
-  Rscript -e "shiny::runApp(port=${port}, host='${host}')"
-
-Documentation:
-  ${projectDir}/dashboard/README.md
-  ${projectDir}/dashboard/QUICKSTART.md
+Manual control commands:
+  Stop dashboard:  lsof -ti:${port} | xargs kill
+  Restart:         cd ${dashboard_dir} && bash launch_dashboard.sh ${results_path}
+  View logs:       tail -f ${results_path}/dashboard_launch.log
 EOF
 
-    # Print message to console (will appear in Nextflow output)
+    # Launch dashboard using background launcher
     echo ""
     echo "════════════════════════════════════════════════════════════════"
-    echo "  🎉 Pipeline Completed Successfully!"
+    echo " Pipeline Completed - Launching Dashboard"
     echo "════════════════════════════════════════════════════════════════"
     echo ""
-    echo "📊 Your interactive dashboard is ready to launch!"
-    echo ""
-    echo "📂 Results location:"
-    echo "   ${results_path}"
-    echo ""
-    echo "🚀 To launch the dashboard, run:"
-    echo ""
-    echo "   cd ${projectDir}/dashboard"
-    echo "   bash launch_dashboard.sh ${results_path}"
-    echo ""
-    echo "════════════════════════════════════════════════════════════════"
-    echo "  🌐 Dashboard URL (after launch):"
-    echo "  http://${host}:${port}"
-    echo "════════════════════════════════════════════════════════════════"
-    echo ""
-    echo "💡 Tips:"
-    echo "   - Click or copy the URL to open in your browser"
-    echo "   - Use Ctrl+C to stop the dashboard"
-    echo "   - Dashboard info saved to: ${results_path}/dashboard_info.txt"
-    echo ""
+    
+    if bash ${dashboard_dir}/background_launch.sh ${results_path}; then
+        echo ""
+        echo "════════════════════════════════════════════════════════════════"
+        echo "  Dashboard URL:"
+        echo "  http://${host}:${port}"
+        echo "════════════════════════════════════════════════════════════════"
+        echo ""
+        echo "Dashboard is running in the background"
+        echo ""
+        echo "Useful commands:"
+        echo "  View logs:  tail -f ${results_path}/dashboard_launch.log"
+        echo "  Stop:       lsof -ti:${port} | xargs kill"
+        echo ""
+    else
+        echo ""
+        echo "Failed to auto-launch dashboard"
+        echo ""
+        echo "To launch manually:"
+        echo "  cd ${dashboard_dir}"
+        echo "  bash launch_dashboard.sh ${results_path}"
+        echo ""
+        echo "════════════════════════════════════════════════════════════════"
+        echo "  Dashboard URL (after manual launch):"
+        echo "  http://${host}:${port}"
+        echo "════════════════════════════════════════════════════════════════"
+        echo ""
+    fi
     """
 
     stub:
