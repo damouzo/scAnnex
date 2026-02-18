@@ -2,60 +2,23 @@
 
 All notable changes to scAnnex will be documented in this file.
 
-## [1.0.0] - 2025-01-XX
-
-### Added
-- Initial release of scAnnex pipeline
-- Multi-format input support (H5AD, RDS, 10X MTX)
-- Quality control with automated filtering
-- Doublet detection using Scrublet
-- Normalization with multiple methods (log, scran)
-- Batch integration (Harmony, Scanorama, BBKNN)
-- Dimensionality reduction (PCA, UMAP)
-- Leiden clustering with configurable resolution
-- Automated cell type annotation
-- Differential expression analysis (Wilcoxon, t-test, logistic regression)
-- Trajectory inference (PAGA, DPT)
-- HTML report generation
-- Docker, Singularity, and Conda profiles
-- Comprehensive test profile with example data
-- Full DSL2 Nextflow implementation
-- Modular process organization
-- Extensive parameter validation
-- Resource optimization with process labels
-
-### Features
-- ✅ Strict Nextflow DSL2 syntax (v25.10+ compatible)
-- ✅ All files pass `nextflow lint` without errors
-- ✅ Modular design with reusable processes
-- ✅ Comprehensive error handling
-- ✅ Automated retry strategies
-- ✅ Progress tracking and logging
-- ✅ MultiQC-style HTML reports
-
-### Pipeline Steps
-1. **UNIFY_INPUT**: Convert various formats to standardized H5AD
-2. **QUALITY_CONTROL**: Filter cells and genes based on QC metrics
-3. **DOUBLET_DETECTION**: Identify and annotate doublets
-4. **NORMALIZE_INTEGRATE**: Normalize and optionally integrate batches
-5. **DIMENSIONALITY_REDUCTION**: Compute PCA and UMAP
-6. **CLUSTER_ANNOTATE**: Perform clustering and annotation
-7. **DIFFERENTIAL_EXPRESSION**: Identify marker genes
-8. **TRAJECTORY_ANALYSIS** (optional): Infer developmental trajectories
-9. **GENERATE_REPORT**: Create comprehensive HTML report
-
-### Dependencies
-- Nextflow ≥23.04.0
-- Python packages: scanpy, anndata, scrublet, harmonypy, scanorama, bbknn
-- R (optional): Seurat, SingleCellExperiment (for RDS input)
-- Container engines: Docker, Singularity, or Conda
-
-### Known Limitations
-- Large datasets (>500k cells) may require significant memory
-- RDS conversion requires R and rpy2 packages
-- Interactive Shiny dashboard not yet implemented (planned for v1.1.0)
-
 ## [Unreleased]
+
+### Changed
+- Updated all modules to use modern Wave/Seqera containers for Singularity profile
+- Replaced old biocontainers (scanpy 1.7.2, anndata 0.8.x) with Wave containers (scanpy 1.12, anndata 0.12.6)
+- UNIFY_INPUT: Now uses `pip_scanpy:46ad0720691ef95a` (scanpy 1.12)
+- QUALITY_CONTROL: Now uses `pip_scanpy:46ad0720691ef95a` (scanpy 1.12)
+- DOUBLET_DETECTION: Now uses `scrublet_scanpy:31ec5c9d8d3579e3` (scanpy 1.12 + scrublet 0.2.3)
+- STANDARD_PROCESSING: Now uses `leidenalg_python-igraph_scanpy:b3d23ac8b00c1980` (scanpy 1.12 + leidenalg 0.11 + igraph 1.0)
+- NORMALIZE_INTEGRATE: Now uses `harmonypy_scanpy:a8efcfdf23c8acc8` (scanpy 1.12 + harmonypy 0.2.0)
+- AUTO_ANNOT_CELLTYPIST: Now uses `celltypist_scanpy:20c2e982b26fecc1` (scanpy 1.12 + celltypist 1.7.1)
+
+### Fixed
+- Fixed AUTO_ANNOT_CELLTYPIST anndata incompatibility (nullable-string format issue)
+- Old celltypist biocontainer couldn't read H5AD files from modern anndata, now resolved with Wave container
+- All Python scripts now handle anndata compatibility (nullable strings) defensively
+- Fixed container compatibility issues with modern anndata versions
 
 ### Planned for v1.1.0
 - Interactive Shiny dashboard for manual curation

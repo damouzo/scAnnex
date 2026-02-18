@@ -3,7 +3,7 @@ process QUALITY_CONTROL {
     label 'process_medium'
 
     conda "\"scanpy>=1.9\""
-    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
+    container "oras://community.wave.seqera.io/library/pip_scanpy:46ad0720691ef95a"
 
     input:
     tuple val(meta), path(h5ad)

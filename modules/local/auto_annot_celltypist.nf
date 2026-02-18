@@ -3,7 +3,7 @@ process AUTO_ANNOT_CELLTYPIST {
     label 'process_medium'
 
     conda "\"celltypist>=1.6\" \"scanpy>=1.9\""
-    container "quay.io/biocontainers/celltypist:1.6.2--pyhdfd78af_0"
+    container "oras://community.wave.seqera.io/library/celltypist_scanpy:20c2e982b26fecc1"
 
     input:
     tuple val(meta), path(h5ad)

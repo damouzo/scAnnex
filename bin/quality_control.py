@@ -32,7 +32,9 @@ import seaborn as sns
 import anndata as ad
 
 # Enable writing of nullable strings (required for anndata >= 0.11)
-ad.settings.allow_write_nullable_strings = True
+# Only set if available (older versions don't have this attribute)
+if hasattr(ad, 'settings') and hasattr(ad.settings, 'allow_write_nullable_strings'):
+    ad.settings.allow_write_nullable_strings = True
 
 # Configure logging
 logging.basicConfig(

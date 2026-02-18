@@ -3,7 +3,7 @@ process NORMALIZE_INTEGRATE {
     label 'process_high'
 
     conda "\"scanpy>=1.9\" \"harmonypy>=0.0.9\""
-    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
+    container "oras://community.wave.seqera.io/library/harmonypy_scanpy:a8efcfdf23c8acc8"
 
     input:
     tuple val(meta), path(h5ad)

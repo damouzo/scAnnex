@@ -3,7 +3,7 @@ process STANDARD_PROCESSING {
     label 'process_high'
 
     conda "\"scanpy>=1.9\" python-igraph leidenalg"
-    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
+    container "oras://community.wave.seqera.io/library/leidenalg_python-igraph_scanpy:b3d23ac8b00c1980"
 
     input:
     tuple val(meta), path(h5ad)

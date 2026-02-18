@@ -3,7 +3,7 @@ process UNIFY_INPUT {
     label 'process_low'
 
     conda "\"scanpy>=1.9\" \"scipy\" \"r-base>=4.0\" \"r-seurat\" \"r-matrix\""
-    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
+    container "oras://community.wave.seqera.io/library/pip_scanpy:46ad0720691ef95a"
 
     input:
     tuple val(meta), path(input_file)

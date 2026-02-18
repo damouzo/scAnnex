@@ -3,7 +3,7 @@ process DOUBLET_DETECTION {
     label 'process_medium'
 
     conda "\"scanpy>=1.9\" \"scrublet>=0.2\""
-    container "quay.io/biocontainers/scanpy:1.7.2--pyhdfd78af_0"
+    container "oras://community.wave.seqera.io/library/scrublet_scanpy:31ec5c9d8d3579e3"
 
     input:
     tuple val(meta), path(h5ad)
