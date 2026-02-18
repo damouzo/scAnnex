@@ -56,17 +56,35 @@ workflow.onComplete {
         def port = params.dashboard_port ?: 3838
         def host = params.dashboard_host ?: 'localhost'
         
+        // Detect HPC environment
+        def isHPC = System.getenv('SLURM_CLUSTER_NAME') != null || 
+                    'srun'.execute().text != null ||
+                    workflow.executor == 'slurm'
+        
         log.info ""
         log.info "════════════════════════════════════════════════════════════════"
         log.info " Pipeline Completed Successfully"
         log.info "════════════════════════════════════════════════════════════════"
         log.info "Results saved to: ${results_path}"
-        log.info "Interactive Dashboard Available. To launch it, run:"
-        log.info "     cd ${dashboard_dir}"
-        log.info "     bash launch_dashboard.sh ${results_path}"
-        log.info ""
-        log.info "Once started, access the dashboard at:"
-        log.info "     http://${host}:${port}"
+        
+        if (isHPC) {
+            log.info "Interactive Dashboard Available"
+            log.info ""
+            log.info "To launch the dashboard, run:"
+            log.info "     cd ${dashboard_dir}"
+            log.info "     bash launch_dashboard_hpc.sh ${results_path}"
+            log.info ""
+            log.info "This will request a SLURM interactive job with dedicated"
+            log.info "compute resources and provide SSH tunnel instructions."
+        } else {
+            log.info "Interactive Dashboard Available. To launch it, run:"
+            log.info "     cd ${dashboard_dir}"
+            log.info "     bash launch_dashboard.sh ${results_path}"
+            log.info ""
+            log.info "Once started, access the dashboard at:"
+            log.info "     http://${host}:${port}"
+        }
+        
         log.info "════════════════════════════════════════════════════════════════"
         log.info ""
     }

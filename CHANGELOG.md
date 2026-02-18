@@ -21,7 +21,6 @@ All notable changes to scAnnex will be documented in this file.
 - Fixed container compatibility issues with modern anndata versions
 
 ### Planned for v1.1.0
-- Interactive Shiny dashboard for manual curation
 - Cell-cell communication analysis (CellPhoneDB, NicheNet)
 - Gene regulatory network inference
 - Spatial transcriptomics support
