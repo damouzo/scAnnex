@@ -1,5 +1,5 @@
 scAnnex Pipeline Implementation Tracker
-Generated: 2026-01-21 (Updated: 2026-01-22 11:30 UTC - After Input Testing + Docs Reorganization)
+Generated: 2026-01-21 (Updated: 2026-02-17 14:00 UTC - After HPC Configuration)
 Source of Truth: docs/internal/InitProject.md + Seqera/Nextflow Expert Recommendations
 
 ═══════════════════════════════════════════════════════════════════════════
@@ -16,10 +16,11 @@ PIPELINE STATUS SUMMARY - JANUARY 22, 2026 (11:30 UTC)
 ✅ COMPLETED: All three input formats tested and working (H5AD, 10xMTX, RDS)
 ✅ COMPLETED: RDS conversion without SeuratDisk (Seurat v5 compatible)
 ✅ COMPLETED: GitHub Actions workflows fixed
-🎉 PRODUCTION-READY: Pipeline ready for user testing
+✅ COMPLETED: HPC SLURM configuration (generic + Apocrita-specific)
+🎉 PRODUCTION-READY: Pipeline ready for user testing and HPC execution
 
-Viability Score: 9.8/10 → 9.9/10 (all input formats validated)
-Next Milestone: User testing + performance optimization
+Viability Score: 9.8/10 → 9.9/10 (all input formats validated + HPC support)
+Next Milestone: User testing + HPC validation + performance optimization
 
 ═══════════════════════════════════════════════════════════════════════════
 INPUT FORMAT TESTING - ✅ COMPLETED (January 22, 2026 11:00 UTC)
@@ -199,8 +200,8 @@ MEDIUM-TERM (Months 2-3):
   ☐ INTEGRATION: Implement annotation merger (multiple tools)
   ☐ CONTAINERS: Build and publish Docker containers to GHCR
   ☐ CONTAINERS: Create Singularity/Apptainer images for HPC
-  ☐ HPC: Test on SLURM/PBS cluster environments
-  ☐ HPC: Create HPC-specific config profiles
+  ✅ HPC: Create HPC-specific config profiles (SLURM generic + Apocrita)
+  ☐ HPC: Test on SLURM cluster (Apocrita validation pending)
   ☐ VALIDATION: Implement integration quality metrics (kBET, LISI)
 
 LONG-TERM (Months 4-6):
@@ -248,17 +249,91 @@ Resolved Issues:
   ✅ No InitProject.md reference (now recovered)
 
 ═══════════════════════════════════════════════════════════════════════════
-FILES CREATED/MODIFIED - January 22, 2026
+HPC SLURM CONFIGURATION - ✅ COMPLETED (February 17, 2026)
 ═══════════════════════════════════════════════════════════════════════════
 
-Created:
+Implemented two-profile approach for HPC execution:
+
+✔ PROFILE #1: Generic SLURM (slurm)
+  - File: conf/slurm.config (93 lines)
+  - Executor: SLURM with customizable queue/account
+  - Features:
+    * Configurable partition via --slurm_queue
+    * Configurable account via --slurm_account
+    * SLURM-specific error retry codes (140, 143, 137, etc.)
+    * Resource labels: process_single through process_high_memory
+  - Usage: nextflow run main.nf -profile slurm,singularity
+
+✔ PROFILE #2: Apocrita-specific (apocrita)
+  - File: conf/apocrita.config (120 lines)
+  - Inherits: Includes slurm.config via includeConfig
+  - Optimized for: QMUL Apocrita cluster (~300 nodes, 13,500 cores)
+  - Features:
+    * Work directory: Automatically set to /gpfs/scratch/$USER/scannex_work
+    * Scratch storage: /gpfs/scratch/$USER (3TB, 65-day retention)
+    * Singularity cache: /gpfs/scratch/$USER/singularity_cache
+    * Conda enabled by default (can use with singularity)
+    * Conservative memory allocations for shared nodes
+    * Smart storage strategy: work in scratch, outputs chosen by user
+  - Usage: nextflow run main.nf -profile apocrita,singularity
+
+✔ DOCUMENTATION #1: AGENTS.md updated
+  - Added HPC Execution section with profile combinations table
+  - Storage best practices for Apocrita (work vs output separation)
+  - First-time setup instructions
+  - Customization examples with proper paths
+
+✔ DOCUMENTATION #2: README.md updated
+  - Replaced old HPC example with new SLURM profiles
+  - Added generic SLURM and Apocrita examples
+  - Documented storage strategy (home vs scratch)
+
+✔ DOCUMENTATION #3: Internal guide created
+  - File: docs/internal/APOCRITA_GUIDE.md (400+ lines)
+  - Spanish/English mix for developers
+  - Comprehensive storage strategy explanation
+  - Work directory automatic configuration documented
+  - Resource management and monitoring commands
+
+✔ STORAGE STRATEGY: Work vs Output separation
+  - Work directory: /gpfs/scratch/$USER/scannex_work (automatic, temporary)
+  - Output <100GB: /data/home/$USER/results (permanent, backed up)
+  - Output >100GB: /gpfs/scratch/$USER/results (archive before 65 days)
+  - Users only specify --outdir, work-dir is automatic
+
+Profile Combinations Available:
+  | Profile | Executor | Software | Use Case |
+  |---------|----------|----------|----------|
+  | slurm | SLURM | None | Generic HPC |
+  | slurm,conda | SLURM | Conda | Generic HPC with conda |
+  | slurm,singularity | SLURM | Singularity | Generic HPC with containers |
+  | apocrita | SLURM | Conda | QMUL Apocrita (default) |
+  | apocrita,singularity | SLURM | Singularity | QMUL Apocrita (recommended) |
+
+Key Achievement:
+  → First SLURM configuration for scAnnex
+  → Flexible two-tier approach (generic + cluster-specific)
+  → Smart storage strategy: automatic work-dir in scratch, user-chosen outdir
+  → Professional documentation following SLC philosophy
+  → Ready for validation on actual HPC clusters
+
+═══════════════════════════════════════════════════════════════════════════
+FILES CREATED/MODIFIED - January 22, 2026 + February 17, 2026
+═══════════════════════════════════════════════════════════════════════════
+
+Created (Jan 22):
   + bin/convert_rds_to_h5ad_direct.R          # RDS conversion without SeuratDisk
   + docs/CONFIGURATION.md                     # User configuration guide
   + docs/internal/ (directory)                # Development docs
   + docs/internal/InitProject.md              # Recovered from git
   + docs/internal/GITHUB_ACTIONS.md           # Workflow explanation
 
-Modified:
+Created (Feb 17):
+  + conf/slurm.config                         # Generic SLURM executor config
+  + conf/apocrita.config                      # Apocrita HPC specific config
+  + docs/internal/APOCRITA_GUIDE.md           # Comprehensive Apocrita guide
+
+Modified (Jan 22):
   * modules/local/unify_input.nf              # Fixed conda syntax, added R/Seurat
   * bin/unify_input.py                        # New load_rds() implementation
   * .gitignore                                # Added docs/internal/
@@ -266,6 +341,14 @@ Modified:
   * docs/GETTING_STARTED.md                   # Updated links, added profile note
   * README.md                                 # Added -profile conda to examples
   * data_demo/README.md                       # Added -profile conda to examples
+
+Modified (Feb 17):
+  * conf/apocrita.config                      # Added workDir for automatic work directory
+  * nextflow.config                           # Added slurm and apocrita profiles
+  * AGENTS.md                                 # Added HPC Execution section + storage strategy
+  * README.md                                 # Updated HPC examples with storage paths
+  * docs/internal/APOCRITA_GUIDE.md           # Updated with work/output separation
+  * scAnnex_execution.todo                    # Updated with HPC + workDir completion
 
 Moved:
   docs/*.md → docs/internal/*.md (except GETTING_STARTED.md, CONFIGURATION.md)

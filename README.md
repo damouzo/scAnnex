@@ -228,13 +228,21 @@ nextflow run main.nf \
 Run on SLURM cluster with Singularity:
 
 ```bash
+# Generic SLURM cluster
 nextflow run main.nf \
-  -profile singularity \
+  -profile slurm,singularity \
   --input samplesheet.csv \
   --outdir results \
   --max_memory '120.GB' \
-  -process.executor slurm \
-  -process.queue normal
+  --slurm_queue normal \
+  --slurm_account myproject
+
+# QMUL Apocrita cluster (work-dir automatically set to scratch)
+nextflow run main.nf \
+  -profile apocrita,singularity \
+  --input /gpfs/scratch/$USER/data/samplesheet.csv \
+  --outdir /data/home/$USER/scannex_results  # <100GB: use home (permanent)
+  # --outdir /gpfs/scratch/$USER/results_large  # >100GB: use scratch (archive before 65 days)
 ```
 
 ### Generate Execution Reports

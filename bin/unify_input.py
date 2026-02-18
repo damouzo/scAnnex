@@ -34,7 +34,9 @@ import pandas as pd
 import scanpy as sc
 
 # Enable writing of nullable strings (required for anndata >= 0.11)
-ad.settings.allow_write_nullable_strings = True
+# Only set if the attribute exists (older versions don't have it)
+if hasattr(ad, 'settings') and hasattr(ad.settings, 'allow_write_nullable_strings'):
+    ad.settings.allow_write_nullable_strings = True
 
 # Configure logging
 logging.basicConfig(
