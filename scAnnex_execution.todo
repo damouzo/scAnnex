@@ -1,6 +1,42 @@
 scAnnex Pipeline Implementation Tracker
-Generated: 2026-01-21 (Updated: 2026-03-02 12:30 UTC - Multi-sample dashboard + schema cleanup)
+Generated: 2026-01-21 (Updated: 2026-03-02 13:25 UTC - Global Harmony integration refactor + runtime fixes)
 Source of Truth: docs/internal/InitProject.md + Seqera/Nextflow Expert Recommendations
+
+═══════════════════════════════════════════════════════════════════════════
+GLOBAL INTEGRATION REFACTOR (INTEGRATE_HARMONYPY) - ✅ COMPLETED (March 02, 2026)
+═══════════════════════════════════════════════════════════════════════════
+
+Scope completed in this sprint:
+  ✅ Replaced per-sample integration path with global multi-sample integration process
+  ✅ Added new process INTEGRATE_HARMONYPY (merge → Harmony → integrated.h5ad)
+  ✅ DGE now runs on integrated object when run_integration=true
+  ✅ Added integrated sample split outputs (integrated/samples/*_integrated.h5ad)
+  ✅ Dashboard default data auto-detection now prioritizes integrated/integrated.h5ad
+  ✅ Fixed runtime stability issues discovered in SLURM execution
+
+Implemented details:
+  ✔ PIPELINE #1: New global integration module
+    - New module: modules/local/integrate_harmonypy.nf
+    - New helper script: bin/split_integrated_by_sample.py
+    - Published outputs:
+      * integrated/integrated.h5ad
+      * integrated/samples/*_integrated.h5ad
+      * integrated/integration_results/*
+
+  ✔ PIPELINE #2: Workflow refactor
+    - workflows/scannex.nf now routes multi-sample annotated objects into INTEGRATE_HARMONYPY
+    - DGE input uses integrated.h5ad when integration is enabled
+    - Legacy merge path is kept only when integration is disabled
+
+  ✔ STABILITY #1: Integration runtime fixes
+    - normalize_integrate.py hardened for Harmony output shape compatibility
+    - Added direct harmonypy fallback when scanpy wrapper fails on shape assignment
+    - Fixed LISI naming collision causing: 'bool' object is not callable
+
+  ✔ STABILITY #2: Nextflow runtime fixes
+    - Fixed missing split script in process work directory by passing script as process input
+    - Removed unnecessary .first() usage on value channels in workflow
+    - Removed stale process selectors in modules.config to reduce warning noise
 
 ═══════════════════════════════════════════════════════════════════════════
 MULTI-SAMPLE DASHBOARD & VALIDATION UPDATE - ✅ COMPLETED (March 02, 2026)
@@ -248,6 +284,7 @@ NEXT STEPS - PRIORITY ORDER
 ═══════════════════════════════════════════════════════════════════════════
 
 IMMEDIATE (Week 2):
+  ☐ VALIDATION: Resolve remaining Nextflow lint/deprecation warnings (strict clean run)
   ☐ USER TESTING #1: Test with real user datasets
   ☐ USER TESTING #2: Collect feedback on dashboard usability
   ☐ USER TESTING #3: Validate parameter defaults
