@@ -23,6 +23,8 @@ dependencies:
   - r-plotly
   - r-dt
   - r-ggplot2
+  - r-ggrepel
+  - r-dplyr
   - r-viridis
   - r-data.table
   - r-jsonlite

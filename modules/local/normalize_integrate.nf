@@ -2,14 +2,15 @@ process NORMALIZE_INTEGRATE {
     tag "$meta.id"
     label 'process_high'
 
-    conda "\"scanpy>=1.9\" \"harmonypy>=0.0.9\""
-    container "oras://community.wave.seqera.io/library/harmonypy_scanpy:a8efcfdf23c8acc8"
+    conda "\"scanpy>=1.9\" \"harmonypy>=0.0.9\" \"scikit-learn\" \"scipy\""
+    container "oras://community.wave.seqera.io/library/harmonypy_scanpy_scikit-learn_scipy:b98faf93ef84524e"
 
     input:
     tuple val(meta), path(h5ad)
 
     output:
     tuple val(meta), path("*_normalized.h5ad"), emit: h5ad
+    path "integration_results/*"               , emit: integration_results
     path "versions.yml"                        , emit: versions
 
     when:

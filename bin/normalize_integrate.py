@@ -185,6 +185,16 @@ Examples:
         default=None,
         help="Save pre-integration checkpoint H5AD"
     )
+    parser.add_argument(
+        "--calculate-integration-metrics",
+        action="store_true",
+        help="Calculate integration quality metrics (kBET, LISI, Silhouette)"
+    )
+    parser.add_argument(
+        "--save-pre-integration",
+        action="store_true",
+        help="Save pre-integration H5AD for comparison"
+    )
     
     return parser.parse_args()
 
@@ -420,16 +430,27 @@ def compute_umap(
 def calculate_integration_metrics(
     adata: sc.AnnData,
     batch_key: str,
-    use_rep: str = 'X_pca'
+    label_key: Optional[str] = None,
+    use_rep: str = 'X_pca',
+    calculate_kbet: bool = True,
+    calculate_lisi: bool = True,
+    calculate_silhouette: bool = True
 ) -> Dict:
-    """Calculate integration quality metrics.
+    """Calculate comprehensive integration quality metrics.
     
-    Implements ASW (Average Silhouette Width) and batch mixing entropy.
+    Implements:
+    - kBET: k-nearest neighbor batch effect test (batch mixing)
+    - LISI: Local Inverse Simpson's Index (batch and label mixing)
+    - Silhouette: Batch and label separation
     
     Args:
         adata: Integrated AnnData
-        batch_key: Batch column
-        use_rep: Representation to use
+        batch_key: Batch column in .obs
+        label_key: Label column for biological signal (e.g., 'leiden_res_0.5')
+        use_rep: Representation to use from .obsm
+        calculate_kbet: Calculate kBET metric
+        calculate_lisi: Calculate LISI metrics
+        calculate_silhouette: Calculate silhouette scores
         
     Returns:
         Dict of metric: value
@@ -438,62 +459,237 @@ def calculate_integration_metrics(
     
     metrics = {}
     
-    try:
-        from sklearn.metrics import silhouette_score
-        
-        # Calculate ASW for batch (lower is better for integration)
-        if use_rep in adata.obsm:
-            X = adata.obsm[use_rep]
-            batch_labels = adata.obs[batch_key].values
+    # Get representation
+    if use_rep not in adata.obsm:
+        logger.warning(f"  ⚠ Representation '{use_rep}' not found in .obsm")
+        return metrics
+    
+    X = adata.obsm[use_rep]
+    batch_labels = adata.obs[batch_key].values
+    n_batches = len(np.unique(batch_labels))
+    
+    logger.info(f"  Using representation: {use_rep}")
+    logger.info(f"  Batch key: {batch_key} ({n_batches} batches)")
+    if label_key:
+        n_labels = len(np.unique(adata.obs[label_key]))
+        logger.info(f"  Label key: {label_key} ({n_labels} labels)")
+    
+    # -----------------------------------------------------------------
+    # Silhouette Scores
+    # -----------------------------------------------------------------
+    if calculate_silhouette:
+        try:
+            from sklearn.metrics import silhouette_score
             
+            # Silhouette for batch (lower = better mixing)
             asw_batch = silhouette_score(X, batch_labels, metric='euclidean')
-            metrics['asw_batch'] = float(asw_batch)
-            logger.info(f"  ASW (batch): {asw_batch:.3f} (lower = better mixing)")
+            metrics['silhouette_batch'] = float(asw_batch)
+            logger.info(f"  Silhouette (batch): {asw_batch:.3f} (lower = better mixing)")
+            
+            # Silhouette for labels (higher = better biological separation)
+            if label_key and label_key in adata.obs.columns:
+                label_values = adata.obs[label_key].values
+                asw_label = silhouette_score(X, label_values, metric='euclidean')
+                metrics['silhouette_label'] = float(asw_label)
+                logger.info(f"  Silhouette (label): {asw_label:.3f} (higher = better separation)")
         
-        # Calculate simple batch mixing entropy
-        # For each cell's k nearest neighbors, measure batch diversity
-        if 'neighbors' in adata.uns:
+        except Exception as e:
+            logger.warning(f"  ⚠ Silhouette calculation failed: {e}")
+    
+    # -----------------------------------------------------------------
+    # kBET (k-nearest neighbor Batch Effect Test)
+    # -----------------------------------------------------------------
+    if calculate_kbet and n_batches > 1:
+        try:
+            logger.info("  Calculating kBET (batch mixing)...")
+            kbet_score = calculate_kbet_metric(adata, batch_key, use_rep)
+            metrics['kbet_score'] = kbet_score
+            logger.info(f"  kBET: {kbet_score:.3f} (closer to 1 = better mixing)")
+        
+        except Exception as e:
+            logger.warning(f"  ⚠ kBET calculation failed: {e}")
+    
+    # -----------------------------------------------------------------
+    # LISI (Local Inverse Simpson's Index)
+    # -----------------------------------------------------------------
+    if calculate_lisi and 'neighbors' in adata.uns:
+        try:
+            logger.info("  Calculating LISI scores...")
+            
+            # iLISI (integration LISI) - batch mixing
+            ilisi_score = calculate_lisi(adata, batch_key, use_rep)
+            metrics['iLISI'] = ilisi_score
+            logger.info(f"  iLISI (batch): {ilisi_score:.3f} (higher = better mixing, max = {n_batches})")
+            
+            # cLISI (cluster LISI) - label preservation
+            if label_key and label_key in adata.obs.columns:
+                clisi_score = calculate_lisi(adata, label_key, use_rep)
+                n_labels = len(np.unique(adata.obs[label_key]))
+                metrics['cLISI'] = clisi_score
+                logger.info(f"  cLISI (label): {clisi_score:.3f} (lower = better preservation, min = 1)")
+        
+        except Exception as e:
+            logger.warning(f"  ⚠ LISI calculation failed: {e}")
+    
+    # -----------------------------------------------------------------
+    # Legacy: Batch mixing entropy
+    # -----------------------------------------------------------------
+    if 'neighbors' in adata.uns:
+        try:
             from scipy.sparse import csr_matrix
             from scipy.stats import entropy
             
-            # Get neighbor graph
             connectivities = adata.obsp['connectivities']
-            batch_labels = adata.obs[batch_key].astype('category')
-            batch_codes = batch_labels.cat.codes.values
-            n_batches = len(batch_labels.cat.categories)
+            batch_labels_cat = adata.obs[batch_key].astype('category')
+            batch_codes = batch_labels_cat.cat.codes.values
             
-            # Calculate batch mixing for each cell
             mixing_scores = []
             for i in range(adata.n_obs):
-                # Get neighbors
                 neighbors_idx = connectivities[i].nonzero()[1]
                 if len(neighbors_idx) == 0:
                     continue
                 
-                # Count batches in neighborhood
                 neighbor_batches = batch_codes[neighbors_idx]
                 batch_counts = np.bincount(neighbor_batches, minlength=n_batches)
                 batch_probs = batch_counts / batch_counts.sum()
-                
-                # Calculate entropy (higher = better mixing)
                 mix_entropy = entropy(batch_probs)
                 mixing_scores.append(mix_entropy)
             
             mean_entropy = np.mean(mixing_scores)
-            max_entropy = np.log(n_batches)  # Maximum possible entropy
+            max_entropy = np.log(n_batches)
             normalized_entropy = mean_entropy / max_entropy if max_entropy > 0 else 0
             
             metrics['batch_mixing_entropy'] = float(mean_entropy)
             metrics['batch_mixing_entropy_normalized'] = float(normalized_entropy)
-            logger.info(f"  Batch mixing entropy: {mean_entropy:.3f} / {max_entropy:.3f}")
-            logger.info(f"  Normalized: {normalized_entropy:.3f} (higher = better, max = 1.0)")
         
-    except ImportError as e:
-        logger.warning(f"  ⚠ Could not calculate all metrics: {e}")
-    except Exception as e:
-        logger.warning(f"  ⚠ Metric calculation failed: {e}")
+        except Exception as e:
+            logger.warning(f"  ⚠ Entropy calculation failed: {e}")
     
     return metrics
+
+
+def calculate_kbet_metric(
+    adata: sc.AnnData,
+    batch_key: str,
+    use_rep: str = 'X_pca',
+    k: int = 25,
+    subsample_size: int = 0.5
+) -> float:
+    """
+    Calculate kBET score (simplified implementation).
+    
+    kBET tests if batch labels are well-mixed in k-nearest neighborhoods.
+    
+    Args:
+        adata: AnnData object
+        batch_key: Batch column
+        use_rep: Representation to use
+        k: Number of neighbors
+        subsample_size: Fraction of cells to subsample (0-1)
+        
+    Returns:
+        kBET acceptance rate (0-1, higher = better mixing)
+    """
+    from scipy.spatial.distance import cdist
+    from scipy.stats import chi2
+    
+    X = adata.obsm[use_rep]
+    batch_labels = adata.obs[batch_key].astype('category')
+    batch_codes = batch_labels.cat.codes.values
+    n_batches = len(batch_labels.cat.categories)
+    
+    # Subsample cells for speed
+    n_cells = adata.n_obs
+    if subsample_size < 1.0:
+        n_sample = int(n_cells * subsample_size)
+        sample_idx = np.random.choice(n_cells, n_sample, replace=False)
+    else:
+        sample_idx = np.arange(n_cells)
+    
+    X_sample = X[sample_idx]
+    batch_sample = batch_codes[sample_idx]
+    
+    # Expected batch frequencies
+    batch_counts = np.bincount(batch_codes, minlength=n_batches)
+    batch_freq = batch_counts / batch_counts.sum()
+    
+    # Calculate kNN for sampled cells
+    distances = cdist(X_sample, X, metric='euclidean')
+    knn_idx = np.argsort(distances, axis=1)[:, 1:k+1]  # Exclude self
+    
+    # Chi-squared test for each cell
+    accepts = []
+    for i in range(len(sample_idx)):
+        neighbor_batches = batch_codes[knn_idx[i]]
+        observed = np.bincount(neighbor_batches, minlength=n_batches)
+        expected = batch_freq * k
+        
+        # Chi-squared test
+        chi2_stat = np.sum((observed - expected)**2 / (expected + 1e-10))
+        dof = n_batches - 1
+        p_value = 1 - chi2.cdf(chi2_stat, dof)
+        
+        # Accept null hypothesis (good mixing) if p > 0.05
+        accepts.append(p_value > 0.05)
+    
+    kbet_score = np.mean(accepts)
+    return float(kbet_score)
+
+
+def calculate_lisi(
+    adata: sc.AnnData,
+    label_key: str,
+    use_rep: str = 'X_pca',
+    perplexity: int = 30
+) -> float:
+    """
+    Calculate LISI (Local Inverse Simpson's Index).
+    
+    LISI measures diversity of labels in local neighborhoods.
+    Higher values = more mixing (good for batch, bad for biological labels).
+    
+    Args:
+        adata: AnnData object
+        label_key: Column in .obs to calculate LISI for
+        use_rep: Representation to use
+        perplexity: Perplexity parameter (similar to k neighbors)
+        
+    Returns:
+        Mean LISI score across all cells
+    """
+    from scipy.spatial.distance import cdist
+    
+    X = adata.obsm[use_rep]
+    labels = adata.obs[label_key].astype('category')
+    label_codes = labels.cat.codes.values
+    n_labels = len(labels.cat.categories)
+    n_cells = adata.n_obs
+    
+    # Calculate distances
+    distances = cdist(X, X, metric='euclidean')
+    
+    # For each cell, calculate LISI
+    lisi_scores = []
+    k = min(3 * perplexity, n_cells - 1)
+    
+    for i in range(n_cells):
+        # Get k nearest neighbors
+        knn_idx = np.argsort(distances[i])[1:k+1]  # Exclude self
+        
+        # Count label frequencies in neighborhood
+        neighbor_labels = label_codes[knn_idx]
+        label_counts = np.bincount(neighbor_labels, minlength=n_labels)
+        label_freqs = label_counts / label_counts.sum()
+        
+        # Calculate Simpson's Index
+        simpson = np.sum(label_freqs ** 2)
+        
+        # LISI is inverse Simpson
+        lisi = 1.0 / (simpson + 1e-10)
+        lisi_scores.append(lisi)
+    
+    mean_lisi = np.mean(lisi_scores)
+    return float(mean_lisi)
 
 
 def plot_before_after_umap(
@@ -599,6 +795,65 @@ def save_integration_report(
     logger.info(f"  ✓ Saved: integration_report.json")
 
 
+def save_integration_metrics(
+    metrics_before: Dict,
+    metrics_after: Dict,
+    output_dir: Path,
+    batch_key: str,
+    integration_method: str
+) -> None:
+    """Save integration metrics to JSON and CSV.
+
+    Args:
+        metrics_before: Metrics before integration
+        metrics_after: Metrics after integration
+        output_dir: Output directory
+        batch_key: Batch key used for integration
+        integration_method: Integration method name
+    """
+    logger.info("Saving integration metrics...")
+
+    metric_keys = sorted(set(metrics_before.keys()) | set(metrics_after.keys()))
+
+    rows = []
+    for key in metric_keys:
+        before_val = metrics_before.get(key, np.nan)
+        after_val = metrics_after.get(key, np.nan)
+
+        # Keep delta as NaN if values are missing/non-numeric
+        try:
+            delta_val = float(after_val) - float(before_val)
+        except Exception:
+            delta_val = np.nan
+
+        rows.append({
+            'metric': key,
+            'before': before_val,
+            'after': after_val,
+            'delta_after_minus_before': delta_val
+        })
+
+    metrics_payload = {
+        'timestamp': datetime.now().isoformat(),
+        'batch_key': batch_key,
+        'integration_method': integration_method,
+        'before': metrics_before,
+        'after': metrics_after,
+        'n_metrics': len(metric_keys)
+    }
+
+    json_path = output_dir / 'integration_metrics.json'
+    with open(json_path, 'w') as f:
+        json.dump(metrics_payload, f, indent=2)
+
+    csv_path = output_dir / 'integration_metrics.csv'
+    metrics_df = pd.DataFrame(rows)
+    metrics_df.to_csv(csv_path, index=False)
+
+    logger.info(f"  ✓ Saved: {json_path.name}")
+    logger.info(f"  ✓ Saved: {csv_path.name}")
+
+
 def main():
     """Main execution function."""
     args = parse_args()
@@ -613,6 +868,10 @@ def main():
     logger.info(f"Input: {args.input}")
     logger.info(f"Output: {args.output}")
     logger.info(f"Results directory: {output_dir}")
+
+    integration_requested = bool(args.run_integration)
+    integration_performed = False
+    all_metrics = {'before': {}, 'after': {}}
     
     try:
         # Load data
@@ -649,6 +908,8 @@ def main():
                 logger.warning("⚠ Skipping integration due to insufficient batch variation")
                 args.run_integration = False
             else:
+                integration_performed = True
+
                 # Save checkpoint before integration
                 if args.save_checkpoint:
                     logger.info(f"Saving pre-integration checkpoint: {args.save_checkpoint}")
@@ -669,21 +930,32 @@ def main():
                 adata = compute_umap(adata, args.n_neighbors, args.umap_min_dist, use_rep='X_pca_harmony')
                 
                 # Calculate integration metrics
-                logger.info("\n" + "─" * 70)
-                logger.info("STEP 5: Integration Quality Metrics")
-                logger.info("─" * 70)
-                metrics_before = calculate_integration_metrics(adata_before, args.batch_key, use_rep='X_pca')
-                metrics_after = calculate_integration_metrics(adata, args.batch_key, use_rep='X_pca_harmony')
-                
-                all_metrics = {
-                    'before': metrics_before,
-                    'after': metrics_after
-                }
-                
-                logger.info("\nComparison:")
-                if 'asw_batch' in metrics_before and 'asw_batch' in metrics_after:
-                    improvement = metrics_before['asw_batch'] - metrics_after['asw_batch']
-                    logger.info(f"  ASW improvement: {improvement:+.3f} (positive = better mixing)")
+                if args.calculate_integration_metrics:
+                    logger.info("\n" + "─" * 70)
+                    logger.info("STEP 5: Integration Quality Metrics")
+                    logger.info("─" * 70)
+                    metrics_before = calculate_integration_metrics(adata_before, args.batch_key, use_rep='X_pca')
+                    metrics_after = calculate_integration_metrics(adata, args.batch_key, use_rep='X_pca_harmony')
+
+                    all_metrics = {
+                        'before': metrics_before,
+                        'after': metrics_after
+                    }
+
+                    logger.info("\nComparison:")
+                    if 'silhouette_batch' in metrics_before and 'silhouette_batch' in metrics_after:
+                        improvement = metrics_before['silhouette_batch'] - metrics_after['silhouette_batch']
+                        logger.info(f"  Silhouette batch improvement: {improvement:+.3f} (positive = better mixing)")
+
+                    save_integration_metrics(
+                        metrics_before=metrics_before,
+                        metrics_after=metrics_after,
+                        output_dir=output_dir,
+                        batch_key=args.batch_key,
+                        integration_method=args.integration_method
+                    )
+                else:
+                    logger.info("\nSkipping integration metrics (--calculate-integration-metrics not set)")
                 
                 # Generate before/after plots
                 logger.info("\n" + "─" * 70)
@@ -719,8 +991,27 @@ def main():
         if args.run_integration:
             logger.info(f"  Integration plots: {output_dir}/")
             logger.info(f"  Integration report: {output_dir}/integration_report.json")
+            if args.calculate_integration_metrics:
+                logger.info(f"  Integration metrics: {output_dir}/integration_metrics.json")
         if args.save_checkpoint:
             logger.info(f"  Pre-integration checkpoint: {args.save_checkpoint}")
+
+        # Always save status artifact so workflow output publication is stable
+        integration_status = {
+            'timestamp': datetime.now().isoformat(),
+            'integration_requested': integration_requested,
+            'integration_performed': integration_performed,
+            'calculate_integration_metrics': bool(args.calculate_integration_metrics),
+            'metrics_available': bool(all_metrics.get('before')) or bool(all_metrics.get('after')),
+            'batch_key': args.batch_key if integration_requested else None,
+            'integration_method': args.integration_method if integration_requested else None
+        }
+
+        status_path = output_dir / 'integration_status.json'
+        with open(status_path, 'w') as f:
+            json.dump(integration_status, f, indent=2)
+
+        logger.info(f"  Integration status: {status_path}")
         
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)

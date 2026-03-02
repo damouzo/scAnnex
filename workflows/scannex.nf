@@ -10,6 +10,8 @@ include { DOUBLET_DETECTION       } from '../modules/local/doublet_detection'
 include { STANDARD_PROCESSING     } from '../modules/local/standard_processing'
 include { AUTO_ANNOT_CELLTYPIST   } from '../modules/local/auto_annot_celltypist'
 include { NORMALIZE_INTEGRATE     } from '../modules/local/normalize_integrate'
+include { MERGE_SAMPLES           } from '../modules/local/merge_samples'
+include { DIFFERENTIAL_EXPRESSION } from '../modules/local/differential_expression'
 include { LAUNCH_DASHBOARD        } from '../modules/local/launch_dashboard'
 
 /*
@@ -111,7 +113,28 @@ workflow SCANNEX {
     }
     
     //
-    // STEP 7: Launch Interactive Dashboard (Optional - enabled by default)
+    // STEP 6.5: Merge samples (for DGE across conditions)
+    //
+    if (params.run_dge) {
+        // Collect all H5AD files and merge them
+        def h5ad_files = final_output.map { _meta, h5ad -> h5ad }.collect()
+        MERGE_SAMPLES (
+            h5ad_files
+        )
+        
+        // STEP 7: Differential Expression Analysis
+        DIFFERENTIAL_EXPRESSION (
+            MERGE_SAMPLES.out.h5ad,
+            params.contrasts_file ? 
+                Channel.fromPath(params.contrasts_file, checkIfExists: true) :
+                Channel.value(file('NO_FILE'))
+        )
+        // Keep final_output as the merged samples for dashboard
+        final_output = MERGE_SAMPLES.out.h5ad.map { h5ad -> [[:], h5ad] }
+    }
+    
+    //
+    // STEP 8: Launch Interactive Dashboard (Optional - enabled by default)
     //
     if (params.enable_dashboard) {
         // Calculate absolute results path

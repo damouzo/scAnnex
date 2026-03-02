@@ -3,17 +3,17 @@ process QUALITY_CONTROL {
     label 'process_medium'
 
     conda "\"scanpy>=1.9\""
-    container "oras://community.wave.seqera.io/library/pip_scanpy:46ad0720691ef95a"
+    container "oras://community.wave.seqera.io/library/scanpy:1.12--45f1dccaf83880df"
 
     input:
     tuple val(meta), path(h5ad)
 
     output:
     tuple val(meta), path("*_qc.h5ad")   , emit: h5ad
-    path "qc_results/"                   , emit: qc_dir
-    path "qc_results/*.png"              , emit: plots
-    path "qc_results/qc_report.json"     , emit: report
-    path "qc_results/cell_attrition_log.csv", emit: attrition_log, optional: true
+    path "qc_results_*"                  , emit: qc_dir
+    path "qc_results_*/*.png"            , emit: plots
+    path "qc_results_*/qc_report.json"   , emit: report
+    path "qc_results_*/cell_attrition_log.csv", emit: attrition_log, optional: true
     path "versions.yml"                  , emit: versions
 
     when:
@@ -38,12 +38,13 @@ process QUALITY_CONTROL {
     
     def attrition_log = params.save_attrition_log ? '--save-attrition-log' : ''
     def max_mito = params.max_mito_percent ? "--max-mito ${params.max_mito_percent}" : ''
+    def qc_dir = "qc_results_${prefix}"
     
     """
     quality_control.py \\
         --input ${h5ad} \\
         --output ${prefix}_qc.h5ad \\
-        --qc-dir qc_results \\
+        --qc-dir ${qc_dir} \
         --min-genes ${params.min_genes} \\
         --min-cells ${params.min_cells} \\
         ${max_mito} \\
@@ -60,13 +61,14 @@ process QUALITY_CONTROL {
 
     stub:
     def prefix = task.ext.prefix ?: "${meta.id}"
+    def qc_dir = "qc_results_${prefix}"
     """
-    mkdir -p qc_results
+    mkdir -p ${qc_dir}
     touch ${prefix}_qc.h5ad
-    touch qc_results/qc_before_violin.png
-    touch qc_results/qc_after_violin.png
-    touch qc_results/qc_report.json
-    touch qc_results/cell_attrition_log.csv
+    touch ${qc_dir}/qc_before_violin.png
+    touch ${qc_dir}/qc_after_violin.png
+    touch ${qc_dir}/qc_report.json
+    touch ${qc_dir}/cell_attrition_log.csv
     touch versions.yml
     """
 }

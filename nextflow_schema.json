@@ -202,6 +202,145 @@
                     "default": 10,
                     "description": "Maximum number of Harmony iterations",
                     "fa_icon": "fas fa-repeat"
+                },
+                "calculate_integration_metrics": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Calculate integration quality metrics (kBET, LISI, Silhouette)",
+                    "fa_icon": "fas fa-chart-line"
+                },
+                "save_pre_integration": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save pre-integration H5AD for comparison",
+                    "fa_icon": "fas fa-save"
+                }
+            }
+        },
+        "cellbender_options": {
+            "title": "CellBender options",
+            "type": "object",
+            "description": "Parameters for ambient RNA removal using CellBender",
+            "properties": {
+                "run_cellbender": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run CellBender ambient RNA removal (MTX inputs)",
+                    "fa_icon": "fas fa-vial"
+                },
+                "cellbender_expected_cells": {
+                    "type": "string",
+                    "default": "auto",
+                    "description": "Expected number of cells (auto or integer as string)",
+                    "fa_icon": "fas fa-users"
+                },
+                "cellbender_total_droplets": {
+                    "type": "integer",
+                    "default": 25000,
+                    "description": "Total droplets included for CellBender",
+                    "fa_icon": "fas fa-filter"
+                },
+                "cellbender_fpr": {
+                    "type": "number",
+                    "default": 0.01,
+                    "description": "CellBender false positive rate",
+                    "fa_icon": "fas fa-percentage"
+                },
+                "cellbender_epochs": {
+                    "type": "integer",
+                    "default": 150,
+                    "description": "CellBender training epochs",
+                    "fa_icon": "fas fa-redo"
+                }
+            }
+        },
+        "dge_options": {
+            "title": "Differential expression options",
+            "type": "object",
+            "description": "Parameters for differential gene expression analysis",
+            "properties": {
+                "run_dge": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run differential expression analysis",
+                    "fa_icon": "fas fa-chart-bar"
+                },
+                "contrasts_file": {
+                    "type": ["string", "null"],
+                    "description": "Path to contrasts CSV file",
+                    "fa_icon": "fas fa-file-csv"
+                },
+                "dge_groupby": {
+                    "type": "string",
+                    "default": "condition",
+                    "description": "obs column used for group comparison",
+                    "fa_icon": "fas fa-object-group"
+                },
+                "dge_reference": {
+                    "type": "string",
+                    "default": "control",
+                    "description": "Reference group for DGE",
+                    "fa_icon": "fas fa-balance-scale-left"
+                },
+                "dge_method": {
+                    "type": "string",
+                    "default": "wilcoxon",
+                    "enum": ["wilcoxon", "t-test", "t-test_overestim_var"],
+                    "description": "Statistical method for DGE",
+                    "fa_icon": "fas fa-calculator"
+                },
+                "dge_min_pct": {
+                    "type": "number",
+                    "default": 0.1,
+                    "description": "Minimum fraction of expressing cells",
+                    "fa_icon": "fas fa-percentage"
+                },
+                "dge_logfc_threshold": {
+                    "type": "number",
+                    "default": 0.25,
+                    "description": "Log fold-change threshold",
+                    "fa_icon": "fas fa-sliders-h"
+                },
+                "dge_pval_cutoff": {
+                    "type": "number",
+                    "default": 0.05,
+                    "description": "Adjusted p-value cutoff",
+                    "fa_icon": "fas fa-signal"
+                },
+                "dge_top_n_genes": {
+                    "type": "integer",
+                    "default": 100,
+                    "description": "Top N genes to export per contrast",
+                    "fa_icon": "fas fa-list-ol"
+                },
+                "dge_save_plots": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Generate DGE plots",
+                    "fa_icon": "fas fa-image"
+                },
+                "dge_save_h5ad": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Save H5AD with DGE results",
+                    "fa_icon": "fas fa-save"
+                }
+            }
+        },
+        "slurm_options": {
+            "title": "SLURM options",
+            "type": "object",
+            "description": "Optional SLURM executor parameters",
+            "properties": {
+                "slurm_queue": {
+                    "type": ["string", "null"],
+                    "description": "SLURM partition/queue",
+                    "fa_icon": "fas fa-server"
+                },
+                "slurm_account": {
+                    "type": ["string", "null"],
+                    "description": "SLURM account",
+                    "fa_icon": "fas fa-user-tag"
                 }
             }
         },
@@ -448,6 +587,18 @@
         },
         {
             "$ref": "#/definitions/annotation_options"
+        },
+        {
+            "$ref": "#/definitions/cellbender_options"
+        },
+        {
+            "$ref": "#/definitions/dge_options"
+        },
+        {
+            "$ref": "#/definitions/dashboard_options"
+        },
+        {
+            "$ref": "#/definitions/slurm_options"
         },
         {
             "$ref": "#/definitions/generic_options"

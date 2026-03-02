@@ -10,10 +10,54 @@ server <- function(input, output, session) {
   rv <- reactiveValues(
     data_obj = NULL,
     qc_report = NULL,
+    qc_reports_multi = list(),
     qc_plots = list(),
     data_loaded = FALSE,
     umap_color_choices = character(0)
   )
+
+  # Initialize sample selector choices
+  observeEvent(TRUE, {
+    if (length(DEFAULT_SAMPLE_IDS) > 0) {
+      updateSelectInput(
+        session,
+        "sample_select",
+        choices = DEFAULT_SAMPLE_IDS,
+        selected = DEFAULT_SAMPLE_IDS[1]
+      )
+    }
+  }, once = TRUE)
+
+  # Auto-populate paths based on selected mode/sample
+  observe({
+    req(input$data_mode)
+
+    if (identical(input$data_mode, "integrated")) {
+      if (nzchar(DEFAULT_MERGED_H5AD)) {
+        updateTextInput(session, "input_h5ad_path", value = DEFAULT_MERGED_H5AD)
+      }
+      if (nzchar(DEFAULT_QC_DIR)) {
+        updateTextInput(session, "input_qc_dir", value = DEFAULT_QC_DIR)
+      }
+      if (nzchar(DEFAULT_DGE_DIR)) {
+        updateTextInput(session, "input_dge_dir", value = DEFAULT_DGE_DIR)
+      }
+    }
+
+    if (identical(input$data_mode, "single")) {
+      req(input$sample_select)
+      if (input$sample_select %in% names(DEFAULT_SAMPLE_H5AD_FILES)) {
+        updateTextInput(
+          session,
+          "input_h5ad_path",
+          value = DEFAULT_SAMPLE_H5AD_FILES[[input$sample_select]]
+        )
+      }
+      if (nzchar(DEFAULT_QC_DIR)) {
+        updateTextInput(session, "input_qc_dir", value = DEFAULT_QC_DIR)
+      }
+    }
+  })
   
   # ===========================================================================
   # DATA LOADING
@@ -21,32 +65,76 @@ server <- function(input, output, session) {
   
   # Load data when button clicked
   observeEvent(input$btn_load_data, {
-    
-    req(input$input_h5ad_path)
+
+    selected_h5ad_path <- input$input_h5ad_path
+    selected_qc_dir <- input$input_qc_dir
+
+    if (identical(input$data_mode, "single") &&
+        !is.null(input$sample_select) &&
+        input$sample_select %in% names(DEFAULT_SAMPLE_H5AD_FILES)) {
+      selected_h5ad_path <- DEFAULT_SAMPLE_H5AD_FILES[[input$sample_select]]
+    }
+
+    req(selected_h5ad_path)
     
     withProgress(message = 'Loading data...', value = 0, {
       
       tryCatch({
         
         # Check file exists
-        if (!file.exists(input$input_h5ad_path)) {
-          stop(sprintf("File not found: %s", input$input_h5ad_path))
+        if (!file.exists(selected_h5ad_path)) {
+          stop(sprintf("File not found: %s", selected_h5ad_path))
         }
         
         incProgress(0.2, detail = "Reading H5AD file")
         
         # Load H5AD data
         rv$data_obj <- load_h5ad_data(
-          input$input_h5ad_path,
+          selected_h5ad_path,
           backed = input$input_backed_mode
         )
         
         incProgress(0.4, detail = "Loading QC report")
         
         # Load QC report if directory exists
-        if (dir.exists(input$input_qc_dir)) {
-          rv$qc_report <- load_qc_report(input$input_qc_dir)
-          rv$qc_plots <- get_qc_plots(input$input_qc_dir)
+        if (dir.exists(selected_qc_dir)) {
+          rv$qc_plots <- get_qc_plots(selected_qc_dir)
+
+          if (identical(input$data_mode, "integrated")) {
+            normalized_qc_dir <- normalizePath(selected_qc_dir, mustWork = TRUE)
+            results_dir <- if (basename(normalized_qc_dir) == "qc") {
+              dirname(normalized_qc_dir)
+            } else {
+              normalized_qc_dir
+            }
+
+            rv$qc_reports_multi <- load_all_qc_reports(results_dir)
+
+            if (length(rv$qc_reports_multi) > 0) {
+              sample_choices <- names(rv$qc_reports_multi)
+              updateSelectInput(
+                session,
+                "qc_sample_select",
+                choices = sample_choices,
+                selected = sample_choices[1]
+              )
+              rv$qc_report <- rv$qc_reports_multi[[sample_choices[1]]]
+
+              sample_plots <- get_qc_plots_for_sample(results_dir, sample_choices[1])
+              if (length(sample_plots) > 0) {
+                rv$qc_plots <- sample_plots
+              }
+            } else {
+              rv$qc_report <- load_qc_report(selected_qc_dir)
+            }
+          } else {
+            rv$qc_reports_multi <- list()
+            rv$qc_report <- load_qc_report(selected_qc_dir)
+          }
+        } else {
+          rv$qc_report <- NULL
+          rv$qc_reports_multi <- list()
+          rv$qc_plots <- list()
         }
         
         incProgress(0.2, detail = "Preparing visualization")
@@ -90,7 +178,8 @@ server <- function(input, output, session) {
   output$data_load_status <- renderText({
     if (rv$data_loaded) {
       sprintf(
-        "✓ Data loaded successfully\n\nDataset: %s cells × %s genes\nBacked mode: %s\nQC report: %s",
+        "✓ Data loaded successfully\n\nMode: %s\nDataset: %s cells × %s genes\nBacked mode: %s\nQC report: %s",
+        ifelse(identical(input$data_mode, "single"), "Single sample", "Integrated"),
         format_number(rv$data_obj$n_cells),
         format_number(rv$data_obj$n_genes),
         ifelse(rv$data_obj$backed, "Yes", "No"),
@@ -117,12 +206,46 @@ server <- function(input, output, session) {
   # ===========================================================================
   # TAB 2: QC OVERVIEW
   # ===========================================================================
+
+  qc_report_active <- reactive({
+    if (identical(input$data_mode, "integrated") && length(rv$qc_reports_multi) > 0) {
+      selected_sample <- input$qc_sample_select
+      if (!is.null(selected_sample) && selected_sample %in% names(rv$qc_reports_multi)) {
+        return(rv$qc_reports_multi[[selected_sample]])
+      }
+    }
+
+    rv$qc_report
+  })
+
+  observeEvent(input$qc_sample_select, {
+    req(identical(input$data_mode, "integrated"))
+    req(input$input_qc_dir)
+    req(input$qc_sample_select)
+
+    if (!dir.exists(input$input_qc_dir)) {
+      return()
+    }
+
+    normalized_qc_dir <- normalizePath(input$input_qc_dir, mustWork = TRUE)
+    results_dir <- if (basename(normalized_qc_dir) == "qc") {
+      dirname(normalized_qc_dir)
+    } else {
+      normalized_qc_dir
+    }
+
+    sample_plots <- get_qc_plots_for_sample(results_dir, input$qc_sample_select)
+    if (length(sample_plots) > 0) {
+      rv$qc_plots <- sample_plots
+    }
+  }, ignoreInit = TRUE)
   
   # QC Info Boxes
   output$qc_box_cells_before <- renderInfoBox({
-    req(rv$qc_report)
+    report <- qc_report_active()
+    req(report)
     
-    n_cells <- rv$qc_report$filtering_statistics$cells_initial
+    n_cells <- report$filtering_statistics$cells_initial
     
     infoBox(
       "Cells (Before QC)",
@@ -133,9 +256,10 @@ server <- function(input, output, session) {
   })
   
   output$qc_box_cells_after <- renderInfoBox({
-    req(rv$qc_report)
+    report <- qc_report_active()
+    req(report)
     
-    n_cells <- rv$qc_report$filtering_statistics$cells_final
+    n_cells <- report$filtering_statistics$cells_final
     
     infoBox(
       "Cells (After QC)",
@@ -146,9 +270,10 @@ server <- function(input, output, session) {
   })
   
   output$qc_box_genes_after <- renderInfoBox({
-    req(rv$qc_report)
+    report <- qc_report_active()
+    req(report)
     
-    n_genes <- rv$qc_report$filtering_statistics$genes_final
+    n_genes <- report$filtering_statistics$genes_final
     
     infoBox(
       "Genes (After QC)",
@@ -159,9 +284,10 @@ server <- function(input, output, session) {
   })
   
   output$qc_box_retention <- renderInfoBox({
-    req(rv$qc_report)
+    report <- qc_report_active()
+    req(report)
     
-    retention_pct <- rv$qc_report$filtering_statistics$cells_retained_pct
+    retention_pct <- report$filtering_statistics$cells_retained_pct
     
     infoBox(
       "Cell Retention",
@@ -173,11 +299,12 @@ server <- function(input, output, session) {
   
   # QC Metrics Table
   output$qc_metrics_table <- renderDT({
-    req(rv$qc_report)
-    
+    report <- qc_report_active()
+    req(report)
+
     # Extract metrics
-    metrics_before <- rv$qc_report$qc_metrics_before
-    metrics_after <- rv$qc_report$qc_metrics_after
+    metrics_before <- report$qc_metrics_before
+    metrics_after <- report$qc_metrics_after
     
     # Build table
     metrics_df <- data.frame(
@@ -226,9 +353,10 @@ server <- function(input, output, session) {
   
   # QC Thresholds Table
   output$qc_thresholds_table <- renderDT({
-    req(rv$qc_report)
+    report <- qc_report_active()
+    req(report)
     
-    thresholds <- rv$qc_report$thresholds_applied
+    thresholds <- report$thresholds_applied
     
     if (is.character(thresholds) && thresholds == "manual") {
       # Return simple message for manual thresholds
@@ -572,7 +700,359 @@ server <- function(input, output, session) {
   })
   
   # ===========================================================================
-  # TAB 5: ANNOTATION STATION
+  # TAB 5: DIFFERENTIAL EXPRESSION
+  # ===========================================================================
+  
+  # Reactive values for DGE data
+  rv_dge <- reactiveValues(
+    dge_dir = NULL,
+    contrasts = character(0),
+    dge_results = list(),
+    dge_loaded = FALSE
+  )
+
+  load_dge_results <- function(dge_dir, show_progress = TRUE) {
+    if (!dir.exists(dge_dir)) {
+      stop(sprintf("Directory not found: %s", dge_dir))
+    }
+
+    if (show_progress) {
+      incProgress(0.2, detail = "Scanning for contrasts")
+    }
+
+    # Find all *_results.csv files (exclude all_contrasts_*)
+    result_files <- list.files(
+      dge_dir,
+      pattern = "^[^all].*_results\\.csv$",
+      full.names = TRUE
+    )
+
+    if (length(result_files) == 0) {
+      stop("No DGE results files found (looking for *_results.csv)")
+    }
+
+    if (show_progress) {
+      incProgress(0.3, detail = sprintf("Loading %d contrasts", length(result_files)))
+    }
+
+    contrast_names <- gsub("_results\\.csv$", "", basename(result_files))
+
+    dge_data <- list()
+    for (i in seq_along(result_files)) {
+      contrast_name <- contrast_names[i]
+      dge_data[[contrast_name]] <- read.csv(result_files[i], stringsAsFactors = FALSE)
+
+      if (show_progress) {
+        incProgress(0.4 / length(result_files))
+      }
+    }
+
+    rv_dge$dge_dir <- dge_dir
+    rv_dge$contrasts <- contrast_names
+    rv_dge$dge_results <- dge_data
+    rv_dge$dge_loaded <- TRUE
+
+    updateSelectInput(
+      session,
+      "dge_contrast_select",
+      choices = contrast_names,
+      selected = contrast_names[1]
+    )
+
+    if (show_progress) {
+      incProgress(0.1, detail = "Done!")
+    }
+  }
+  
+  # Load DGE results
+  observeEvent(input$btn_load_dge, {
+    
+    req(input$input_dge_dir)
+    
+    withProgress(message = 'Loading DGE results...', value = 0, {
+      
+      tryCatch({
+        load_dge_results(input$input_dge_dir, show_progress = TRUE)
+        
+        showNotification(
+          sprintf("Loaded %d contrasts successfully", length(rv_dge$contrasts)),
+          type = "message",
+          duration = 3
+        )
+        
+      }, error = function(e) {
+        showNotification(
+          paste("Error loading DGE results:", e$message),
+          type = "error",
+          duration = 10
+        )
+        rv_dge$dge_loaded <- FALSE
+      })
+    })
+  })
+
+  # Auto-load DGE results for integrated mode when data is loaded
+  observeEvent(rv$data_loaded, {
+    if (!isTRUE(rv$data_loaded) || !identical(input$data_mode, "integrated")) {
+      return()
+    }
+
+    dge_dir <- input$input_dge_dir
+    if (!rv_dge$dge_loaded && !is.null(dge_dir) && nzchar(dge_dir) && dir.exists(dge_dir)) {
+      tryCatch({
+        load_dge_results(dge_dir, show_progress = FALSE)
+        showNotification(
+          sprintf("Auto-loaded DGE results (%d contrasts)", length(rv_dge$contrasts)),
+          type = "message",
+          duration = 3
+        )
+      }, error = function(e) {
+        showNotification(
+          paste("DGE auto-load skipped:", e$message),
+          type = "warning",
+          duration = 5
+        )
+      })
+    }
+  }, ignoreInit = TRUE)
+  
+  # DGE load status
+  output$dge_load_status <- renderText({
+    if (rv_dge$dge_loaded) {
+      sprintf(
+        "✓ DGE results loaded successfully\n\nContrasts found: %d\nDirectory: %s",
+        length(rv_dge$contrasts),
+        basename(rv_dge$dge_dir)
+      )
+    } else {
+      "No DGE results loaded. Enter directory path and click 'Load DGE Results'."
+    }
+  })
+  
+  # Volcano plot
+  output$dge_volcano_plot <- renderPlot({
+    req(rv_dge$dge_loaded)
+    req(input$dge_contrast_select)
+    
+    # Get selected contrast data
+    dge_df <- rv_dge$dge_results[[input$dge_contrast_select]]
+    
+    if (is.null(dge_df) || nrow(dge_df) == 0) {
+      plot.new()
+      text(0.5, 0.5, "No data available for this contrast", cex = 1.5)
+      return()
+    }
+    
+    # Add significance column
+    dge_df$significant <- with(dge_df, 
+      abs(log2_fc) >= input$dge_logfc_threshold & 
+      pvalue_adj < input$dge_pval_threshold
+    )
+    
+    # Add direction column for coloring
+    dge_df$direction <- ifelse(
+      !dge_df$significant, "Not Significant",
+      ifelse(dge_df$log2_fc > 0, "Upregulated", "Downregulated")
+    )
+    
+    # Create volcano plot
+    p <- ggplot(dge_df, aes(x = log2_fc, y = -log10(pvalue_adj))) +
+      geom_point(aes(color = direction), alpha = 0.6, size = 2) +
+      scale_color_manual(
+        values = c(
+          "Upregulated" = "#d62728",
+          "Downregulated" = "#1f77b4",
+          "Not Significant" = "gray70"
+        )
+      ) +
+      geom_hline(yintercept = -log10(input$dge_pval_threshold), 
+                 linetype = "dashed", color = "gray30") +
+      geom_vline(xintercept = c(-input$dge_logfc_threshold, input$dge_logfc_threshold), 
+                 linetype = "dashed", color = "gray30") +
+      labs(
+        title = sprintf("Volcano Plot: %s", input$dge_contrast_select),
+        x = "Log2 Fold Change",
+        y = "-Log10 Adjusted P-value",
+        color = "Regulation"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5, face = "bold")
+      )
+    
+    # Add gene labels if requested
+    if (input$dge_show_gene_names && input$dge_top_n_genes > 0) {
+      
+      # Get top N significant genes by p-value
+      top_genes <- dge_df %>%
+        filter(significant) %>%
+        arrange(pvalue_adj) %>%
+        head(input$dge_top_n_genes)
+      
+      if (nrow(top_genes) > 0) {
+        p <- p + 
+          ggrepel::geom_text_repel(
+            data = top_genes,
+            aes(label = gene),
+            size = 3,
+            max.overlaps = 20,
+            box.padding = 0.5,
+            point.padding = 0.3
+          )
+      }
+    }
+    
+    print(p)
+  })
+  
+  # Significant genes table
+  output$dge_significant_genes_table <- renderDT({
+    req(rv_dge$dge_loaded)
+    req(input$dge_contrast_select)
+    
+    # Get selected contrast data
+    dge_df <- rv_dge$dge_results[[input$dge_contrast_select]]
+    
+    if (is.null(dge_df) || nrow(dge_df) == 0) {
+      return(data.frame(Message = "No data available"))
+    }
+    
+    # Filter for significant genes
+    sig_genes <- dge_df %>%
+      filter(
+        abs(log2_fc) >= input$dge_logfc_threshold,
+        pvalue_adj < input$dge_pval_threshold
+      ) %>%
+      arrange(pvalue_adj) %>%
+      select(gene, log2_fc, pvalue, pvalue_adj, mean_expr_group1, mean_expr_group2)
+    
+    # Round numeric columns
+    sig_genes$log2_fc <- round(sig_genes$log2_fc, 3)
+    sig_genes$pvalue <- format(sig_genes$pvalue, scientific = TRUE, digits = 3)
+    sig_genes$pvalue_adj <- format(sig_genes$pvalue_adj, scientific = TRUE, digits = 3)
+    sig_genes$mean_expr_group1 <- round(sig_genes$mean_expr_group1, 3)
+    sig_genes$mean_expr_group2 <- round(sig_genes$mean_expr_group2, 3)
+    
+    datatable(
+      sig_genes,
+      options = list(
+        pageLength = 25,
+        scrollX = TRUE,
+        order = list(list(3, 'asc'))  # Sort by adjusted p-value
+      ),
+      rownames = FALSE,
+      caption = sprintf(
+        "Significant genes: %d (Log2FC >= %.2f, Adj. P-value < %.3f)",
+        nrow(sig_genes),
+        input$dge_logfc_threshold,
+        input$dge_pval_threshold
+      )
+    )
+  })
+  
+  # Download volcano plot
+  output$btn_download_volcano <- downloadHandler(
+    filename = function() {
+      sprintf("volcano_%s.png", input$dge_contrast_select)
+    },
+    content = function(file) {
+      # Get selected contrast data
+      dge_df <- rv_dge$dge_results[[input$dge_contrast_select]]
+      
+      # Add significance column
+      dge_df$significant <- with(dge_df, 
+        abs(log2_fc) >= input$dge_logfc_threshold & 
+        pvalue_adj < input$dge_pval_threshold
+      )
+      
+      # Add direction column
+      dge_df$direction <- ifelse(
+        !dge_df$significant, "Not Significant",
+        ifelse(dge_df$log2_fc > 0, "Upregulated", "Downregulated")
+      )
+      
+      # Create plot
+      p <- ggplot(dge_df, aes(x = log2_fc, y = -log10(pvalue_adj))) +
+        geom_point(aes(color = direction), alpha = 0.6, size = 2) +
+        scale_color_manual(
+          values = c(
+            "Upregulated" = "#d62728",
+            "Downregulated" = "#1f77b4",
+            "Not Significant" = "gray70"
+          )
+        ) +
+        geom_hline(yintercept = -log10(input$dge_pval_threshold), 
+                   linetype = "dashed", color = "gray30") +
+        geom_vline(xintercept = c(-input$dge_logfc_threshold, input$dge_logfc_threshold), 
+                   linetype = "dashed", color = "gray30") +
+        labs(
+          title = sprintf("Volcano Plot: %s", input$dge_contrast_select),
+          x = "Log2 Fold Change",
+          y = "-Log10 Adjusted P-value",
+          color = "Regulation"
+        ) +
+        theme_minimal(base_size = 14) +
+        theme(
+          legend.position = "bottom",
+          plot.title = element_text(hjust = 0.5, face = "bold")
+        )
+      
+      # Add gene labels if requested
+      if (input$dge_show_gene_names && input$dge_top_n_genes > 0) {
+        top_genes <- dge_df %>%
+          filter(significant) %>%
+          arrange(pvalue_adj) %>%
+          head(input$dge_top_n_genes)
+        
+        if (nrow(top_genes) > 0) {
+          p <- p + 
+            ggrepel::geom_text_repel(
+              data = top_genes,
+              aes(label = gene),
+              size = 3,
+              max.overlaps = 20
+            )
+        }
+      }
+      
+      # Save to file
+      ggsave(file, plot = p, width = 10, height = 8, dpi = 300)
+    }
+  )
+  
+  # Download significant genes CSV
+  output$btn_download_sig_genes <- downloadHandler(
+    filename = function() {
+      sprintf("significant_genes_%s.csv", input$dge_contrast_select)
+    },
+    content = function(file) {
+      dge_df <- rv_dge$dge_results[[input$dge_contrast_select]]
+      
+      sig_genes <- dge_df %>%
+        filter(
+          abs(log2_fc) >= input$dge_logfc_threshold,
+          pvalue_adj < input$dge_pval_threshold
+        ) %>%
+        arrange(pvalue_adj)
+      
+      write.csv(sig_genes, file, row.names = FALSE)
+    }
+  )
+  
+  # Download all results CSV
+  output$btn_download_all_results <- downloadHandler(
+    filename = function() {
+      sprintf("all_results_%s.csv", input$dge_contrast_select)
+    },
+    content = function(file) {
+      dge_df <- rv_dge$dge_results[[input$dge_contrast_select]]
+      write.csv(dge_df, file, row.names = FALSE)
+    }
+  )
+  
+  # ===========================================================================
+  # TAB 6: ANNOTATION STATION
   # ===========================================================================
   
   # Reactive value to store custom annotation

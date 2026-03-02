@@ -46,6 +46,12 @@ ui <- dashboardPage(
       ),
       
       menuItem(
+        "Differential Expression",
+        tabName = "tab_dge",
+        icon = icon("chart-line")
+      ),
+      
+      menuItem(
         "Annotation Station",
         tabName = "tab_annotation",
         icon = icon("tags")
@@ -109,7 +115,29 @@ ui <- dashboardPage(
             solidHeader = TRUE,
             width = 12,
             
-            p("Select the H5AD file and QC results directory to visualize:"),
+            p("Select analysis mode and paths to visualize:"),
+
+            radioButtons(
+              "data_mode",
+              "Analysis Mode:",
+              choices = c(
+                "Integrated (Multi-Sample)" = "integrated",
+                "Single Sample" = "single"
+              ),
+              selected = ifelse(DEFAULT_MERGED_H5AD != "", "integrated", "single"),
+              inline = TRUE
+            ),
+
+            conditionalPanel(
+              condition = "input.data_mode == 'single'",
+              selectInput(
+                "sample_select",
+                "Select Sample:",
+                choices = if (length(DEFAULT_SAMPLE_IDS) > 0) DEFAULT_SAMPLE_IDS else c("No samples detected"),
+                selected = if (length(DEFAULT_SAMPLE_IDS) > 0) DEFAULT_SAMPLE_IDS[1] else "No samples detected",
+                width = "100%"
+              )
+            ),
             
             fluidRow(
               column(
@@ -159,6 +187,24 @@ ui <- dashboardPage(
         tabName = "tab_qc",
         
         h2("Quality Control Overview"),
+
+        conditionalPanel(
+          condition = "input.data_mode == 'integrated'",
+          fluidRow(
+            box(
+              title = "Sample QC Selector",
+              status = "primary",
+              solidHeader = TRUE,
+              width = 12,
+              selectInput(
+                "qc_sample_select",
+                "View QC for Sample:",
+                choices = c("summary"),
+                selected = "summary"
+              )
+            )
+          )
+        ),
         
         # Summary boxes
         fluidRow(
@@ -342,7 +388,155 @@ ui <- dashboardPage(
       ),
       
       # ========================================================================
-      # TAB 5: Annotation Station
+      # TAB 5: Differential Expression
+      # ========================================================================
+      tabItem(
+        tabName = "tab_dge",
+        
+        h2("Differential Gene Expression Analysis"),
+        
+        fluidRow(
+          box(
+            title = "DGE Results Location",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+            
+            p("Specify the directory containing DGE results (dge_results/ folder):"),
+            
+            fluidRow(
+              column(
+                width = 10,
+                textInput(
+                  "input_dge_dir",
+                  "DGE Results Directory:",
+                  value = DEFAULT_DGE_DIR,
+                  placeholder = "e.g., results_dge_SUCCESS/dge/dge_results",
+                  width = "100%"
+                )
+              ),
+              column(
+                width = 2,
+                br(),
+                actionButton(
+                  "btn_load_dge",
+                  "Load DGE Results",
+                  icon = icon("upload"),
+                  class = "btn-primary"
+                )
+              )
+            ),
+            
+            verbatimTextOutput("dge_load_status")
+          )
+        ),
+        
+        fluidRow(
+          box(
+            title = "Contrast Selection",
+            status = "info",
+            solidHeader = TRUE,
+            width = 3,
+            
+            selectInput(
+              "dge_contrast_select",
+              "Select Contrast:",
+              choices = c("No contrasts loaded"),
+              selected = NULL
+            ),
+            
+            hr(),
+            
+            h5("Filtering Options"),
+            
+            sliderInput(
+              "dge_pval_threshold",
+              "P-value threshold:",
+              min = 0.001,
+              max = 0.1,
+              value = 0.05,
+              step = 0.001
+            ),
+            
+            sliderInput(
+              "dge_logfc_threshold",
+              "Log2 FC threshold:",
+              min = 0,
+              max = 2,
+              value = 0.25,
+              step = 0.05
+            ),
+            
+            checkboxInput(
+              "dge_show_gene_names",
+              "Show gene names on volcano plot",
+              value = TRUE
+            ),
+            
+            sliderInput(
+              "dge_top_n_genes",
+              "Number of top genes to label:",
+              min = 0,
+              max = 50,
+              value = 10,
+              step = 5
+            )
+          ),
+          
+          box(
+            title = "Volcano Plot",
+            status = "success",
+            solidHeader = TRUE,
+            width = 9,
+            
+            plotOutput("dge_volcano_plot", height = "600px"),
+            
+            br(),
+            
+            downloadButton(
+              "btn_download_volcano",
+              "Download Volcano Plot (PNG)",
+              class = "btn-sm"
+            )
+          )
+        ),
+        
+        fluidRow(
+          box(
+            title = "Significant Genes",
+            status = "warning",
+            solidHeader = TRUE,
+            width = 12,
+            collapsible = TRUE,
+            
+            DTOutput("dge_significant_genes_table"),
+            
+            br(),
+            
+            fluidRow(
+              column(
+                width = 3,
+                downloadButton(
+                  "btn_download_sig_genes",
+                  "Download Significant Genes (CSV)",
+                  class = "btn-sm"
+                )
+              ),
+              column(
+                width = 3,
+                downloadButton(
+                  "btn_download_all_results",
+                  "Download All Results (CSV)",
+                  class = "btn-sm"
+                )
+              )
+            )
+          )
+        )
+      ),
+      
+      # ========================================================================
+      # TAB 6: Annotation Station
       # ========================================================================
       tabItem(
         tabName = "tab_annotation",
@@ -455,7 +649,7 @@ ui <- dashboardPage(
       ),
       
       # ========================================================================
-      # TAB 6: About
+      # TAB 7: About
       # ========================================================================
       tabItem(
         tabName = "tab_about",

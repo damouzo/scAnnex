@@ -20,8 +20,8 @@ except ImportError as e:
     sys.exit(1)
 
 # Paths
-mtx_dir = Path(__file__).parent / "10xMTX" / "filtered_feature_bc_matrix"
-output_file = Path(__file__).parent / "H5AD" / "pbmc_1k.h5ad"
+mtx_dir = Path(__file__).parent.parent / "10xMTX" / "filtered_feature_bc_matrix"
+output_file = Path(__file__).parent / "pbmc_1k.h5ad"
 
 print("Generating H5AD demo file...")
 print(f"Input: {mtx_dir}")

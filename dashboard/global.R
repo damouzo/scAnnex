@@ -56,6 +56,8 @@ suppressPackageStartupMessages({
   library(plotly)
   library(DT)
   library(ggplot2)
+  library(dplyr)
+  library(ggrepel)
   library(reticulate)  # Loaded AFTER setting RETICULATE_PYTHON
   library(viridis)
   library(data.table)
@@ -314,6 +316,150 @@ get_qc_plots <- function(qc_dir) {
   }
   
   return(plot_files)
+}
+
+#' Get QC plots for a specific sample in multi-sample results
+#'
+#' @param results_dir Path to pipeline results directory
+#' @param sample_id Sample identifier
+#' @return Character vector of plot file paths for the sample
+get_qc_plots_for_sample <- function(results_dir, sample_id) {
+
+  qc_root <- file.path(results_dir, "qc")
+  if (!dir.exists(qc_root) || is.null(sample_id) || !nzchar(sample_id)) {
+    return(character(0))
+  }
+
+  candidate_dirs <- c(
+    file.path(qc_root, sample_id),
+    file.path(qc_root, paste0("qc_results_", sample_id)),
+    file.path(qc_root, "qc_results")
+  )
+
+  plot_files <- character(0)
+  for (plot_dir in unique(candidate_dirs)) {
+    if (dir.exists(plot_dir)) {
+      files <- list.files(
+        plot_dir,
+        pattern = "\\.(png|jpg|jpeg)$",
+        full.names = TRUE
+      )
+      # Keep sample-specific files when present
+      if (length(files) > 0) {
+        sample_matches <- files[grepl(sample_id, basename(files), fixed = TRUE)]
+        plot_files <- c(plot_files, if (length(sample_matches) > 0) sample_matches else files)
+      }
+    }
+  }
+
+  unique(sort(plot_files))
+}
+
+#' Detect sample-level annotated H5AD files
+#'
+#' @param results_dir Path to results directory
+#' @return Named character vector: sample_id -> h5ad_path
+detect_sample_h5ad_files <- function(results_dir) {
+
+  auto_annot_dir <- file.path(results_dir, "auto_annot")
+  if (!dir.exists(auto_annot_dir)) {
+    return(setNames(character(0), character(0)))
+  }
+
+  sample_files <- list.files(
+    auto_annot_dir,
+    pattern = "_annotated\\.h5ad$",
+    full.names = TRUE
+  )
+
+  if (length(sample_files) == 0) {
+    return(setNames(character(0), character(0)))
+  }
+
+  sample_ids <- gsub("_annotated\\.h5ad$", "", basename(sample_files))
+  names(sample_files) <- sample_ids
+
+  return(sample_files)
+}
+
+#' Load all QC reports available for a multi-sample run
+#'
+#' @param results_dir Path to results directory
+#' @return Named list of QC reports by sample ID (or summary)
+load_all_qc_reports <- function(results_dir) {
+
+  qc_root <- file.path(results_dir, "qc")
+  if (!dir.exists(qc_root)) {
+    return(list())
+  }
+
+  sample_qc_files <- list.files(
+    qc_root,
+    pattern = "_qc\\.h5ad$",
+    full.names = FALSE
+  )
+  sample_ids <- gsub("_qc\\.h5ad$", "", sample_qc_files)
+
+  # Also detect sample IDs from per-sample QC directories
+  sample_dirs <- list.files(
+    qc_root,
+    pattern = "^qc_results_",
+    full.names = FALSE,
+    include.dirs = TRUE
+  )
+  sample_ids <- unique(c(sample_ids, gsub("^qc_results_", "", sample_dirs)))
+
+  report_files <- list.files(
+    qc_root,
+    pattern = "qc_report\\.json$",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+  qc_reports <- list()
+
+  # Prefer sample-specific reports when available
+  if (length(sample_ids) > 0 && length(report_files) > 0) {
+    for (sample_id in sample_ids) {
+      sample_report <- report_files[grepl(sample_id, report_files, fixed = TRUE)]
+      if (length(sample_report) > 0) {
+        qc_reports[[sample_id]] <- fromJSON(sample_report[1])
+      }
+    }
+  }
+
+  # Fallback to shared report if sample-specific reports are not available
+  if (length(qc_reports) == 0) {
+    shared_candidates <- c(
+      file.path(qc_root, "qc_results", "qc_report.json"),
+      file.path(qc_root, "qc_report.json")
+    )
+
+    shared_report <- NULL
+    for (candidate in shared_candidates) {
+      if (file.exists(candidate)) {
+        shared_report <- candidate
+        break
+      }
+    }
+
+    if (is.null(shared_report) && length(report_files) > 0) {
+      shared_report <- report_files[1]
+    }
+
+    if (!is.null(shared_report)) {
+      shared_data <- fromJSON(shared_report)
+      if (length(sample_ids) > 0) {
+        for (sample_id in sample_ids) {
+          qc_reports[[sample_id]] <- shared_data
+        }
+      } else {
+        qc_reports[["summary"]] <- shared_data
+      }
+    }
+  }
+
+  return(qc_reports)
 }
 
 # ==============================================================================
@@ -739,49 +885,70 @@ DEFAULT_DATA_PATH <- if (data_path_env == "") {
   data_path_env
 }
 
-# Auto-detect H5AD file and QC directory
+# Auto-detect H5AD file and result directories
 DEFAULT_H5AD_FILE <- ""
 DEFAULT_QC_DIR <- ""
+DEFAULT_MERGED_H5AD <- ""
+DEFAULT_DGE_DIR <- ""
+DEFAULT_SAMPLE_IDS <- character(0)
+DEFAULT_SAMPLE_H5AD_FILES <- setNames(character(0), character(0))
 
 if (dir.exists(DEFAULT_DATA_PATH)) {
-  # Find H5AD file - try dashboard, annotated, or processed files
-  patterns <- c(
-    ".*dashboard.*\\.h5ad$",     # Dashboard-compatible files (priority)
-    ".*annotated.*\\.h5ad$",      # Annotated files
-    ".*processed.*\\.h5ad$"       # Processed files
-  )
-  
-  h5ad_files <- character(0)
-  for (pattern in patterns) {
-    files <- list.files(
-      DEFAULT_DATA_PATH,
-      pattern = pattern,
-      recursive = TRUE,
-      full.names = TRUE
+  # Prefer merged integrated output for multi-sample runs
+  merged_candidate <- file.path(DEFAULT_DATA_PATH, "merged", "merged_samples.h5ad")
+  if (file.exists(merged_candidate)) {
+    DEFAULT_MERGED_H5AD <- merged_candidate
+    DEFAULT_H5AD_FILE <- DEFAULT_MERGED_H5AD
+    message(sprintf("  Auto-detected merged H5AD: %s", basename(DEFAULT_MERGED_H5AD)))
+  }
+
+  # Fallback H5AD detection when merged file is not available
+  if (DEFAULT_H5AD_FILE == "") {
+    patterns <- c(
+      ".*dashboard.*\\.h5ad$",
+      ".*annotated.*\\.h5ad$",
+      ".*processed.*\\.h5ad$"
     )
-    if (length(files) > 0) {
-      h5ad_files <- files
-      break
+
+    h5ad_files <- character(0)
+    for (pattern in patterns) {
+      files <- list.files(
+        DEFAULT_DATA_PATH,
+        pattern = pattern,
+        recursive = TRUE,
+        full.names = TRUE
+      )
+      if (length(files) > 0) {
+        h5ad_files <- files
+        break
+      }
+    }
+
+    if (length(h5ad_files) > 0) {
+      DEFAULT_H5AD_FILE <- h5ad_files[1]
+      message(sprintf("  Auto-detected H5AD: %s", basename(DEFAULT_H5AD_FILE)))
     }
   }
-  
-  if (length(h5ad_files) > 0) {
-    DEFAULT_H5AD_FILE <- h5ad_files[1]
-    message(sprintf("  Auto-detected H5AD: %s", basename(DEFAULT_H5AD_FILE)))
+
+  # Detect sample-level annotated files for single-sample mode
+  DEFAULT_SAMPLE_H5AD_FILES <- detect_sample_h5ad_files(DEFAULT_DATA_PATH)
+  DEFAULT_SAMPLE_IDS <- names(DEFAULT_SAMPLE_H5AD_FILES)
+  if (length(DEFAULT_SAMPLE_IDS) > 0) {
+    message(sprintf("  Auto-detected samples: %s", paste(DEFAULT_SAMPLE_IDS, collapse = ", ")))
   }
-  
-  # Find QC directory
-  qc_dirs <- list.files(
-    DEFAULT_DATA_PATH,
-    pattern = "^qc$",
-    recursive = FALSE,
-    full.names = TRUE,
-    include.dirs = TRUE
-  )
-  
-  if (length(qc_dirs) > 0) {
-    DEFAULT_QC_DIR <- qc_dirs[1]
+
+  # QC directory
+  qc_candidate <- file.path(DEFAULT_DATA_PATH, "qc")
+  if (dir.exists(qc_candidate)) {
+    DEFAULT_QC_DIR <- qc_candidate
     message(sprintf("  Auto-detected QC dir: %s", DEFAULT_QC_DIR))
+  }
+
+  # DGE directory
+  dge_candidate <- file.path(DEFAULT_DATA_PATH, "dge", "dge_results")
+  if (dir.exists(dge_candidate)) {
+    DEFAULT_DGE_DIR <- dge_candidate
+    message(sprintf("  Auto-detected DGE dir: %s", DEFAULT_DGE_DIR))
   }
 }
 
