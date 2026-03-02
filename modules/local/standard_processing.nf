@@ -10,10 +10,10 @@ process STANDARD_PROCESSING {
 
     output:
     tuple val(meta), path("*_processed.h5ad"), emit: h5ad
-    path "standard_processing_results/"        , emit: results_dir
-    path "standard_processing_results/*.png"   , emit: plots
-    path "standard_processing_results/umap_coordinates.csv", emit: umap_coords
-    path "standard_processing_results/cell_metadata.csv"   , emit: metadata
+    path "standard_processing_results/*"        , emit: results_dir
+    path "standard_processing_results/*/*.png"   , emit: plots
+    path "standard_processing_results/*/umap_coordinates.csv", emit: umap_coords
+    path "standard_processing_results/*/cell_metadata.csv"   , emit: metadata
     path "versions.yml"                        , emit: versions
 
     when:
@@ -32,7 +32,7 @@ process STANDARD_PROCESSING {
     standard_processing.py \\
         --input ${h5ad} \\
         --output ${prefix}_processed.h5ad \\
-        --output-dir standard_processing_results \\
+        --output-dir standard_processing_results/${prefix} \
         --target-sum ${params.target_sum} \\
         --n-top-genes ${params.n_top_genes} \\
         --n-pcs ${params.n_pcs} \\
@@ -53,12 +53,12 @@ process STANDARD_PROCESSING {
     stub:
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    mkdir -p standard_processing_results
+    mkdir -p standard_processing_results/${prefix}
     touch ${prefix}_processed.h5ad
-    touch standard_processing_results/pca_variance.png
-    touch standard_processing_results/clustering_multi_resolution.png
-    touch standard_processing_results/umap_coordinates.csv
-    touch standard_processing_results/cell_metadata.csv
+    touch standard_processing_results/${prefix}/pca_variance.png
+    touch standard_processing_results/${prefix}/clustering_multi_resolution.png
+    touch standard_processing_results/${prefix}/umap_coordinates.csv
+    touch standard_processing_results/${prefix}/cell_metadata.csv
     touch versions.yml
     """
 }

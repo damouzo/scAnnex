@@ -10,9 +10,9 @@ process DOUBLET_DETECTION {
 
     output:
     tuple val(meta), path("*_doublets.h5ad"), emit: h5ad
-    path "*.png"                             , emit: plots
-    path "doublet_scores.csv"                , emit: scores
-    path "doublet_attrition.json"            , emit: attrition, optional: true
+    path "*_doublet_*.png"                   , emit: plots
+    path "*_doublet_scores.csv"              , emit: scores
+    path "*_doublet_attrition.json"          , emit: attrition, optional: true
     path "versions.yml"                      , emit: versions
 
     when:
@@ -28,10 +28,12 @@ process DOUBLET_DETECTION {
     def doublet_rate = params.expected_doublet_rate ?: 0.05
     
     """
-    doublet_detection.py \\
+    doublet_detection.py \
         --input ${h5ad} \\
         --output ${prefix}_doublets.h5ad \\
-        --scores doublet_scores.csv \\
+        --scores ${prefix}_doublet_scores.csv \
+        --plot-prefix ${prefix} \
+        --attrition-output ${prefix}_doublet_attrition.json \
         --expected-doublet-rate ${doublet_rate} \\
         ${remove_doublets} \\
         ${save_attrition} \\
@@ -48,10 +50,10 @@ process DOUBLET_DETECTION {
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
     touch ${prefix}_doublets.h5ad
-    touch doublet_histogram.png
-    touch doublet_umap.png
-    touch doublet_scores.csv
-    touch doublet_attrition.json
+    touch ${prefix}_doublet_histogram.png
+    touch ${prefix}_doublet_umap.png
+    touch ${prefix}_doublet_scores.csv
+    touch ${prefix}_doublet_attrition.json
     touch versions.yml
     """
 }

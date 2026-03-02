@@ -711,6 +711,32 @@ server <- function(input, output, session) {
     dge_loaded = FALSE
   )
 
+  normalize_dge_df <- function(df) {
+    if (is.null(df) || nrow(df) == 0) {
+      return(df)
+    }
+
+    # Harmonize column names from different DGE exporters
+    if (!"log2_fc" %in% names(df) && "log2fc" %in% names(df)) {
+      df$log2_fc <- df$log2fc
+    }
+    if (!"pvalue" %in% names(df) && "pval" %in% names(df)) {
+      df$pvalue <- df$pval
+    }
+    if (!"pvalue_adj" %in% names(df) && "pval_adj" %in% names(df)) {
+      df$pvalue_adj <- df$pval_adj
+    }
+
+    # Ensure numeric columns are numeric
+    for (col_name in c("log2_fc", "pvalue", "pvalue_adj")) {
+      if (col_name %in% names(df)) {
+        df[[col_name]] <- suppressWarnings(as.numeric(df[[col_name]]))
+      }
+    }
+
+    df
+  }
+
   load_dge_results <- function(dge_dir, show_progress = TRUE) {
     if (!dir.exists(dge_dir)) {
       stop(sprintf("Directory not found: %s", dge_dir))
@@ -740,7 +766,8 @@ server <- function(input, output, session) {
     dge_data <- list()
     for (i in seq_along(result_files)) {
       contrast_name <- contrast_names[i]
-      dge_data[[contrast_name]] <- read.csv(result_files[i], stringsAsFactors = FALSE)
+      df <- read.csv(result_files[i], stringsAsFactors = FALSE)
+      dge_data[[contrast_name]] <- normalize_dge_df(df)
 
       if (show_progress) {
         incProgress(0.4 / length(result_files))
@@ -816,19 +843,6 @@ server <- function(input, output, session) {
     }
   }, ignoreInit = TRUE)
   
-  # DGE load status
-  output$dge_load_status <- renderText({
-    if (rv_dge$dge_loaded) {
-      sprintf(
-        "✓ DGE results loaded successfully\n\nContrasts found: %d\nDirectory: %s",
-        length(rv_dge$contrasts),
-        basename(rv_dge$dge_dir)
-      )
-    } else {
-      "No DGE results loaded. Enter directory path and click 'Load DGE Results'."
-    }
-  })
-  
   # Volcano plot
   output$dge_volcano_plot <- renderPlot({
     req(rv_dge$dge_loaded)
@@ -840,6 +854,23 @@ server <- function(input, output, session) {
     if (is.null(dge_df) || nrow(dge_df) == 0) {
       plot.new()
       text(0.5, 0.5, "No data available for this contrast", cex = 1.5)
+      return()
+    }
+
+    required_cols <- c("log2_fc", "pvalue_adj")
+    missing_cols <- setdiff(required_cols, names(dge_df))
+    if (length(missing_cols) > 0) {
+      plot.new()
+      text(0.5, 0.5, sprintf("Missing required DGE columns: %s", paste(missing_cols, collapse = ", ")), cex = 1.2)
+      return()
+    }
+
+    dge_df <- dge_df %>%
+      filter(!is.na(log2_fc), !is.na(pvalue_adj), pvalue_adj > 0)
+
+    if (nrow(dge_df) == 0) {
+      plot.new()
+      text(0.5, 0.5, "No valid points available for volcano plot", cex = 1.2)
       return()
     }
     
@@ -895,7 +926,7 @@ server <- function(input, output, session) {
           ggrepel::geom_text_repel(
             data = top_genes,
             aes(label = gene),
-            size = 3,
+            size = input$dge_gene_label_size,
             max.overlaps = 20,
             box.padding = 0.5,
             point.padding = 0.3
@@ -917,6 +948,15 @@ server <- function(input, output, session) {
     if (is.null(dge_df) || nrow(dge_df) == 0) {
       return(data.frame(Message = "No data available"))
     }
+
+    required_cols <- c("log2_fc", "pvalue_adj")
+    missing_cols <- setdiff(required_cols, names(dge_df))
+    if (length(missing_cols) > 0) {
+      return(data.frame(Message = sprintf("Missing required DGE columns: %s", paste(missing_cols, collapse = ", "))))
+    }
+
+    dge_df <- dge_df %>%
+      filter(!is.na(log2_fc), !is.na(pvalue_adj), pvalue_adj > 0)
     
     # Filter for significant genes
     sig_genes <- dge_df %>%
@@ -924,15 +964,36 @@ server <- function(input, output, session) {
         abs(log2_fc) >= input$dge_logfc_threshold,
         pvalue_adj < input$dge_pval_threshold
       ) %>%
-      arrange(pvalue_adj) %>%
-      select(gene, log2_fc, pvalue, pvalue_adj, mean_expr_group1, mean_expr_group2)
+      arrange(pvalue_adj)
+
+    if (nrow(sig_genes) == 0) {
+      return(datatable(
+        data.frame(Message = "No significant genes found with current thresholds"),
+        options = list(dom = 't', ordering = FALSE),
+        rownames = FALSE
+      ))
+    }
+
+    display_cols <- c("gene", "log2_fc", "pvalue", "pvalue_adj", "mean_expr_group1", "mean_expr_group2")
+    display_cols <- intersect(display_cols, names(sig_genes))
+    sig_genes <- sig_genes %>% select(all_of(display_cols))
     
     # Round numeric columns
-    sig_genes$log2_fc <- round(sig_genes$log2_fc, 3)
-    sig_genes$pvalue <- format(sig_genes$pvalue, scientific = TRUE, digits = 3)
-    sig_genes$pvalue_adj <- format(sig_genes$pvalue_adj, scientific = TRUE, digits = 3)
-    sig_genes$mean_expr_group1 <- round(sig_genes$mean_expr_group1, 3)
-    sig_genes$mean_expr_group2 <- round(sig_genes$mean_expr_group2, 3)
+    if ("log2_fc" %in% names(sig_genes)) {
+      sig_genes$log2_fc <- round(sig_genes$log2_fc, 3)
+    }
+    if ("pvalue" %in% names(sig_genes)) {
+      sig_genes$pvalue <- format(sig_genes$pvalue, scientific = TRUE, digits = 3)
+    }
+    if ("pvalue_adj" %in% names(sig_genes)) {
+      sig_genes$pvalue_adj <- format(sig_genes$pvalue_adj, scientific = TRUE, digits = 3)
+    }
+    if ("mean_expr_group1" %in% names(sig_genes)) {
+      sig_genes$mean_expr_group1 <- round(sig_genes$mean_expr_group1, 3)
+    }
+    if ("mean_expr_group2" %in% names(sig_genes)) {
+      sig_genes$mean_expr_group2 <- round(sig_genes$mean_expr_group2, 3)
+    }
     
     datatable(
       sig_genes,
@@ -959,6 +1020,14 @@ server <- function(input, output, session) {
     content = function(file) {
       # Get selected contrast data
       dge_df <- rv_dge$dge_results[[input$dge_contrast_select]]
+
+      required_cols <- c("log2_fc", "pvalue_adj")
+      if (is.null(dge_df) || nrow(dge_df) == 0 || any(!required_cols %in% names(dge_df))) {
+        stop("Selected contrast does not have required columns for volcano plot")
+      }
+
+      dge_df <- dge_df %>%
+        filter(!is.na(log2_fc), !is.na(pvalue_adj), pvalue_adj > 0)
       
       # Add significance column
       dge_df$significant <- with(dge_df, 
@@ -1010,7 +1079,7 @@ server <- function(input, output, session) {
             ggrepel::geom_text_repel(
               data = top_genes,
               aes(label = gene),
-              size = 3,
+              size = input$dge_gene_label_size,
               max.overlaps = 20
             )
         }
@@ -1028,6 +1097,14 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       dge_df <- rv_dge$dge_results[[input$dge_contrast_select]]
+
+      required_cols <- c("log2_fc", "pvalue_adj")
+      if (is.null(dge_df) || nrow(dge_df) == 0 || any(!required_cols %in% names(dge_df))) {
+        stop("Selected contrast does not have required columns for filtering")
+      }
+
+      dge_df <- dge_df %>%
+        filter(!is.na(log2_fc), !is.na(pvalue_adj), pvalue_adj > 0)
       
       sig_genes <- dge_df %>%
         filter(

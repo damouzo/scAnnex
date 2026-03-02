@@ -361,8 +361,20 @@ get_qc_plots_for_sample <- function(results_dir, sample_id) {
 #' @return Named character vector: sample_id -> h5ad_path
 detect_sample_h5ad_files <- function(results_dir) {
 
-  auto_annot_dir <- file.path(results_dir, "auto_annot")
-  if (!dir.exists(auto_annot_dir)) {
+  candidate_dirs <- c(
+    file.path(results_dir, "auto_annot"),
+    file.path(results_dir, "auto")
+  )
+
+  auto_annot_dir <- NULL
+  for (candidate in candidate_dirs) {
+    if (dir.exists(candidate)) {
+      auto_annot_dir <- candidate
+      break
+    }
+  }
+
+  if (is.null(auto_annot_dir)) {
     return(setNames(character(0), character(0)))
   }
 
@@ -894,12 +906,18 @@ DEFAULT_SAMPLE_IDS <- character(0)
 DEFAULT_SAMPLE_H5AD_FILES <- setNames(character(0), character(0))
 
 if (dir.exists(DEFAULT_DATA_PATH)) {
-  # Prefer merged integrated output for multi-sample runs
+  # Prefer global integrated output for multi-sample runs
+  integrated_candidate <- file.path(DEFAULT_DATA_PATH, "integrated", "integrated.h5ad")
   merged_candidate <- file.path(DEFAULT_DATA_PATH, "merged", "merged_samples.h5ad")
-  if (file.exists(merged_candidate)) {
+
+  if (file.exists(integrated_candidate)) {
+    DEFAULT_MERGED_H5AD <- integrated_candidate
+    DEFAULT_H5AD_FILE <- DEFAULT_MERGED_H5AD
+    message(sprintf("  Auto-detected integrated H5AD: %s", basename(DEFAULT_MERGED_H5AD)))
+  } else if (file.exists(merged_candidate)) {
     DEFAULT_MERGED_H5AD <- merged_candidate
     DEFAULT_H5AD_FILE <- DEFAULT_MERGED_H5AD
-    message(sprintf("  Auto-detected merged H5AD: %s", basename(DEFAULT_MERGED_H5AD)))
+    message(sprintf("  Auto-detected merged H5AD (legacy): %s", basename(DEFAULT_MERGED_H5AD)))
   }
 
   # Fallback H5AD detection when merged file is not available

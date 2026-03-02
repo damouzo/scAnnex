@@ -56,6 +56,15 @@ Notes:
     because nextflow binary is not installed in current shell.
   - Syntax validation passed for edited R/Python/NF files.
 
+UI/UX polish (Dashboard DGE tab):
+  ✅ Removed persistent DGE load status text panel
+  ✅ Kept transient popup notifications for successful/failed DGE load
+  ✅ Replaced sliders with numeric inputs for:
+    * Adj. P-value threshold
+    * Log2 FC threshold
+    * Number of top genes to label
+  ✅ Added slider for gene name label size in volcano plot
+
 Documentation consolidation:
   ✅ NEXT_STEPS.md has been synchronized to this tracker
   ✅ This .todo now contains sprint status needed to retire NEXT_STEPS.md

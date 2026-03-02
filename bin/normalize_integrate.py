@@ -369,11 +369,39 @@ def run_harmony_integration(
     """
     logger.info(f"Running Harmony integration...")
     logger.info(f"  Parameters: theta={theta}, max_iter={max_iter}")
-    
+
+    if 'X_pca' not in adata.obsm:
+        raise ValueError("X_pca not found in adata.obsm. Run PCA before Harmony integration.")
+
+    pca = np.asarray(adata.obsm['X_pca'])
+    if pca.ndim != 2:
+        raise ValueError(f"X_pca must be 2D, found shape {pca.shape}")
+
+    n_cells, n_pcs = pca.shape
+
+    def _validate_and_store(corrected_matrix: np.ndarray) -> sc.AnnData:
+        corrected = np.asarray(corrected_matrix)
+
+        if corrected.ndim != 2:
+            raise ValueError(f"Harmony output must be 2D, found shape {corrected.shape}")
+
+        if corrected.shape == (n_pcs, n_cells):
+            corrected = corrected.T
+        elif corrected.shape != (n_cells, n_pcs):
+            if corrected.T.shape == (n_cells, n_pcs):
+                corrected = corrected.T
+            else:
+                raise ValueError(
+                    f"Unexpected Harmony output shape {corrected.shape}; expected {(n_cells, n_pcs)}"
+                )
+
+        adata.obsm['X_pca_harmony'] = corrected
+        return adata
+
+    # First attempt: scanpy wrapper
     try:
         import scanpy.external as sce
-        
-        # Run Harmony
+
         sce.pp.harmony_integrate(
             adata,
             key=batch_key,
@@ -382,18 +410,41 @@ def run_harmony_integration(
             theta=theta,
             max_iter_harmony=max_iter
         )
-        
-        logger.info(f"  ✓ Harmony integration complete")
-        logger.info(f"    Integrated PCA stored in .obsm['X_pca_harmony']")
-        
+
+        _ = _validate_and_store(adata.obsm['X_pca_harmony'])
+
+        logger.info("  ✓ Harmony integration complete (scanpy wrapper)")
+        logger.info("    Integrated PCA stored in .obsm['X_pca_harmony']")
         return adata
-        
+
     except ImportError:
         logger.error("  ✗ harmonypy not available")
         logger.error("    Install with: pip install harmonypy")
         raise
-    except Exception as e:
-        logger.error(f"  ✗ Harmony integration failed: {e}")
+    except Exception as wrapper_error:
+        logger.warning(f"  ⚠ Scanpy Harmony wrapper failed: {wrapper_error}")
+        logger.info("  Falling back to direct harmonypy execution...")
+
+    # Fallback: direct harmonypy call
+    try:
+        import harmonypy as hm
+
+        harmony_out = hm.run_harmony(
+            pca.T,
+            adata.obs,
+            [batch_key],
+            theta=theta,
+            max_iter_harmony=max_iter
+        )
+
+        _validate_and_store(np.asarray(harmony_out.Z_corr))
+
+        logger.info("  ✓ Harmony integration complete (direct harmonypy)")
+        logger.info("    Integrated PCA stored in .obsm['X_pca_harmony']")
+        return adata
+
+    except Exception as direct_error:
+        logger.error(f"  ✗ Harmony integration failed: {direct_error}")
         raise
 
 
@@ -433,7 +484,7 @@ def calculate_integration_metrics(
     label_key: Optional[str] = None,
     use_rep: str = 'X_pca',
     calculate_kbet: bool = True,
-    calculate_lisi: bool = True,
+    calculate_lisi_metric: bool = True,
     calculate_silhouette: bool = True
 ) -> Dict:
     """Calculate comprehensive integration quality metrics.
@@ -449,7 +500,7 @@ def calculate_integration_metrics(
         label_key: Label column for biological signal (e.g., 'leiden_res_0.5')
         use_rep: Representation to use from .obsm
         calculate_kbet: Calculate kBET metric
-        calculate_lisi: Calculate LISI metrics
+        calculate_lisi_metric: Calculate LISI metrics
         calculate_silhouette: Calculate silhouette scores
         
     Returns:
@@ -512,7 +563,7 @@ def calculate_integration_metrics(
     # -----------------------------------------------------------------
     # LISI (Local Inverse Simpson's Index)
     # -----------------------------------------------------------------
-    if calculate_lisi and 'neighbors' in adata.uns:
+    if calculate_lisi_metric and 'neighbors' in adata.uns:
         try:
             logger.info("  Calculating LISI scores...")
             

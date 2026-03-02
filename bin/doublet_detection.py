@@ -23,6 +23,8 @@ def parse_args():
     parser.add_argument("--input", type=str, required=True, help="Input H5AD file")
     parser.add_argument("--output", type=str, required=True, help="Output H5AD file")
     parser.add_argument("--scores", type=str, required=True, help="Output scores CSV")
+    parser.add_argument("--plot-prefix", type=str, default="doublet", help="Prefix for generated plot filenames")
+    parser.add_argument("--attrition-output", type=str, default="doublet_attrition.json", help="Output attrition JSON")
     parser.add_argument("--expected-doublet-rate", type=float, default=0.05,
                        help="Expected doublet rate")
     parser.add_argument("--remove-doublets", action="store_true",
@@ -60,19 +62,19 @@ def run_scrublet(adata, expected_doublet_rate=0.05):
     return adata, scrub
 
 
-def plot_doublet_results(adata, scrub):
+def plot_doublet_results(adata, scrub, plot_prefix="doublet"):
     """Generate doublet detection plots"""
     # Histogram of doublet scores
     fig, ax = plt.subplots(figsize=(8, 5))
     scrub.plot_histogram()
-    plt.savefig("doublet_histogram.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"{plot_prefix}_doublet_histogram.png", dpi=300, bbox_inches='tight')
     plt.close()
     
     # UMAP colored by doublet score (if UMAP exists)
     if 'X_umap' in adata.obsm:
         fig, ax = plt.subplots(figsize=(8, 6))
         sc.pl.umap(adata, color='doublet_score', ax=ax, show=False)
-        plt.savefig("doublet_umap.png", dpi=300, bbox_inches='tight')
+        plt.savefig(f"{plot_prefix}_doublet_umap.png", dpi=300, bbox_inches='tight')
         plt.close()
 
 
@@ -90,7 +92,7 @@ def main():
     
     # Generate plots
     print("Generating plots...")
-    plot_doublet_results(adata, scrub)
+    plot_doublet_results(adata, scrub, args.plot_prefix)
     
     # Save scores
     adata.obs[['doublet_score', 'predicted_doublet']].to_csv(args.scores)
@@ -119,7 +121,7 @@ def main():
             'pct_of_initial': round((n_doublets_predicted / n_cells_initial * 100), 2) if n_cells_initial > 0 else 0
         }
         
-        with open('doublet_attrition.json', 'w') as f:
+        with open(args.attrition_output, 'w') as f:
             json.dump(attrition_data, f, indent=2)
         print(f"✓ Saved doublet attrition log")
     

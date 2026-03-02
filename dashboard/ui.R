@@ -425,9 +425,7 @@ ui <- dashboardPage(
                   class = "btn-primary"
                 )
               )
-            ),
-            
-            verbatimTextOutput("dge_load_status")
+            )
           )
         ),
         
@@ -448,22 +446,22 @@ ui <- dashboardPage(
             hr(),
             
             h5("Filtering Options"),
-            
-            sliderInput(
+
+            numericInput(
               "dge_pval_threshold",
-              "P-value threshold:",
-              min = 0.001,
-              max = 0.1,
+              "Adj. P-value threshold:",
               value = 0.05,
+              min = 1e-10,
+              max = 1,
               step = 0.001
             ),
-            
-            sliderInput(
+
+            numericInput(
               "dge_logfc_threshold",
               "Log2 FC threshold:",
-              min = 0,
-              max = 2,
               value = 0.25,
+              min = 0,
+              max = 10,
               step = 0.05
             ),
             
@@ -472,14 +470,23 @@ ui <- dashboardPage(
               "Show gene names on volcano plot",
               value = TRUE
             ),
-            
-            sliderInput(
+
+            numericInput(
               "dge_top_n_genes",
               "Number of top genes to label:",
-              min = 0,
-              max = 50,
               value = 10,
-              step = 5
+              min = 0,
+              max = 1000,
+              step = 1
+            ),
+
+            sliderInput(
+              "dge_gene_label_size",
+              "Gene name size on plot:",
+              min = 2,
+              max = 8,
+              value = 3,
+              step = 0.5
             )
           ),
           

@@ -9,7 +9,7 @@ include { QUALITY_CONTROL         } from '../modules/local/quality_control'
 include { DOUBLET_DETECTION       } from '../modules/local/doublet_detection'
 include { STANDARD_PROCESSING     } from '../modules/local/standard_processing'
 include { AUTO_ANNOT_CELLTYPIST   } from '../modules/local/auto_annot_celltypist'
-include { NORMALIZE_INTEGRATE     } from '../modules/local/normalize_integrate'
+include { INTEGRATE_HARMONYPY     } from '../modules/local/integrate_harmonypy'
 include { MERGE_SAMPLES           } from '../modules/local/merge_samples'
 include { DIFFERENTIAL_EXPRESSION } from '../modules/local/differential_expression'
 include { LAUNCH_DASHBOARD        } from '../modules/local/launch_dashboard'
@@ -101,36 +101,45 @@ workflow SCANNEX {
     }
     
     //
-    // STEP 6: Integration (Optional - for multi-batch datasets)
+    // STEP 6: Integration (Optional - global multi-sample Harmony)
     //
     def final_output = annotated_output
     
     if (params.run_integration && params.batch_key) {
-        NORMALIZE_INTEGRATE (
-            annotated_output
+        def integration_inputs = annotated_output.map { _meta, h5ad -> h5ad }.collect()
+        def split_script = file("${projectDir}/bin/split_integrated_by_sample.py", checkIfExists: true)
+        INTEGRATE_HARMONYPY (
+            integration_inputs,
+            split_script
         )
-        final_output = NORMALIZE_INTEGRATE.out.h5ad
+        final_output = INTEGRATE_HARMONYPY.out.h5ad.map { h5ad -> [[:], h5ad] }
     }
     
     //
     // STEP 6.5: Merge samples (for DGE across conditions)
     //
     if (params.run_dge) {
-        // Collect all H5AD files and merge them
-        def h5ad_files = final_output.map { _meta, h5ad -> h5ad }.collect()
-        MERGE_SAMPLES (
-            h5ad_files
-        )
+        def dge_input_h5ad
+
+        if (params.run_integration && params.batch_key) {
+            dge_input_h5ad = final_output.map { _meta, h5ad -> h5ad }
+        } else {
+            // If integration is disabled, merge per-sample objects for DGE
+            def h5ad_files = final_output.map { _meta, h5ad -> h5ad }.collect()
+            MERGE_SAMPLES (
+                h5ad_files
+            )
+            dge_input_h5ad = MERGE_SAMPLES.out.h5ad
+            final_output = MERGE_SAMPLES.out.h5ad.map { h5ad -> [[:], h5ad] }
+        }
         
         // STEP 7: Differential Expression Analysis
         DIFFERENTIAL_EXPRESSION (
-            MERGE_SAMPLES.out.h5ad,
+            dge_input_h5ad,
             params.contrasts_file ? 
-                Channel.fromPath(params.contrasts_file, checkIfExists: true) :
-                Channel.value(file('NO_FILE'))
+                channel.fromPath(params.contrasts_file, checkIfExists: true) :
+                channel.value(file('NO_FILE'))
         )
-        // Keep final_output as the merged samples for dashboard
-        final_output = MERGE_SAMPLES.out.h5ad.map { h5ad -> [[:], h5ad] }
     }
     
     //
@@ -141,7 +150,7 @@ workflow SCANNEX {
         def results_path = params.outdir.startsWith('/') ? params.outdir : "${workflow.launchDir}/${params.outdir}"
         
         LAUNCH_DASHBOARD (
-            final_output.map { _meta, h5ad -> h5ad }.first(),
+            final_output.map { _meta, h5ad -> h5ad },
             "${projectDir}/dashboard",
             results_path
         )
