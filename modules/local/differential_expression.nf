@@ -22,7 +22,7 @@ process DIFFERENTIAL_EXPRESSION {
     def args = task.ext.args ?: ''
     
     // Build DGE arguments
-    def contrasts_arg = contrasts_file.name != 'NO_FILE' ? "--contrasts ${contrasts_file}" : ''
+    def contrasts_arg = contrasts_file.name != 'NO_FILE' ? "--contrasts-file ${contrasts_file}" : ''
     def groupby = params.dge_groupby ? "--groupby ${params.dge_groupby}" : ''
     def reference = params.dge_reference ? "--reference ${params.dge_reference}" : ''
     def method = params.dge_method ? "--method ${params.dge_method}" : '--method wilcoxon'
@@ -36,7 +36,6 @@ process DIFFERENTIAL_EXPRESSION {
     # Run DGE (output H5AD not required)
     differential_expression.py \\
         --input ${h5ad} \\
-        --output merged_dge_results.h5ad \\
         --output-dir dge_results \\
         ${contrasts_arg} \\
         ${groupby} \\

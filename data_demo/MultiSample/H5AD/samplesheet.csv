@@ -1,0 +1,5 @@
+sample_id,file_type,file_path,batch,condition
+control_batch1,h5ad,data_demo/MultiSample/H5AD/control_batch1.h5ad,batch1,control
+control_batch2,h5ad,data_demo/MultiSample/H5AD/control_batch2.h5ad,batch2,control
+treated_batch1,h5ad,data_demo/MultiSample/H5AD/treated_batch1.h5ad,batch1,treated
+treated_batch2,h5ad,data_demo/MultiSample/H5AD/treated_batch2.h5ad,batch2,treated

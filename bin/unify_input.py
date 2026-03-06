@@ -396,9 +396,22 @@ def standardize_anndata(
     """
     logger.info("Standardizing AnnData structure...")
     
-    # Ensure gene names are in index
+    # Ensure gene names are in index and avoid index/column name conflicts.
+    # Newer anndata versions fail on write_h5ad if index.name duplicates a
+    # column name with different values.
     if adata.var.index.name is None:
-        adata.var.index.name = 'gene_id'
+        adata.var.index.name = 'gene_symbol'
+
+    if adata.var.index.name in adata.var.columns:
+        idx_name = adata.var.index.name
+        idx_values = pd.Index(adata.var.index.astype(str))
+        col_values = adata.var[idx_name].astype(str)
+        if not idx_values.equals(pd.Index(col_values)):
+            logger.warning(
+                f"Detected var index/column name collision on '{idx_name}'. "
+                "Renaming var index to 'gene_symbol' to ensure H5AD compatibility."
+            )
+            adata.var.index.name = 'gene_symbol'
     
     # Ensure cell barcodes have a name
     if adata.obs.index.name is None:

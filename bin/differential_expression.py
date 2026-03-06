@@ -163,6 +163,32 @@ Examples:
     return parser.parse_args()
 
 
+def prepare_de_matrix(adata: sc.AnnData) -> sc.AnnData:
+    """Prepare a DE-appropriate matrix in .X (fixed best-practice policy).
+
+    Priority:
+    1) log-normalized, non-scaled matrix in .layers['normalized']
+    2) fallback to .layers['counts'] with temporary normalization+log1p
+    3) fallback to current .X only if no layer is available
+    """
+    adata_de = adata.copy()
+
+    if "normalized" in adata_de.layers:
+        adata_de.X = adata_de.layers["normalized"].copy()
+        logger.info("DE matrix selected: .layers['normalized']")
+        return adata_de
+
+    if "counts" in adata_de.layers:
+        adata_de.X = adata_de.layers["counts"].copy()
+        sc.pp.normalize_total(adata_de, target_sum=1e4)
+        sc.pp.log1p(adata_de)
+        logger.info("DE matrix selected: .layers['counts'] (temporary log-normalized)")
+        return adata_de
+
+    logger.warning("DE matrix selected: adata.X (no normalized/counts layer found)")
+    return adata_de
+
+
 def load_contrasts_file(contrasts_file: str) -> pd.DataFrame:
     """Load contrasts from CSV file."""
     logger.info(f"Loading contrasts from: {contrasts_file}")
@@ -300,6 +326,26 @@ def run_single_contrast(
     pvals = result['pvals'][group_key]
     pvals_adj = result['pvals_adj'][group_key]
     logfoldchanges = result['logfoldchanges'][group_key]
+
+    # Some data representations (e.g. integrated/scaled matrices) can produce
+    # NaN logfoldchanges in scanpy. Compute a fallback from group means to
+    # preserve effect-size based filtering and volcano classification.
+    if np.isnan(logfoldchanges).all():
+        logger.warning(
+            "All logfoldchanges are NaN from scanpy; computing fallback log2fc from group means."
+        )
+        layer_name = 'counts' if 'counts' in adata_contrast.layers else None
+        matrix = adata_contrast.layers[layer_name] if layer_name else adata_contrast.X
+
+        g1_mask = adata_contrast.obs[variable].astype(str) == str(group1)
+        g2_mask = adata_contrast.obs[variable].astype(str) == str(group2)
+
+        g1_mean = np.asarray(matrix[g1_mask, :].mean(axis=0)).ravel()
+        g2_mean = np.asarray(matrix[g2_mask, :].mean(axis=0)).ravel()
+
+        fallback_fc = np.log2((g1_mean + 1.0) / (g2_mean + 1.0))
+        gene_to_fc = dict(zip(adata_contrast.var_names.astype(str), fallback_fc))
+        logfoldchanges = np.array([gene_to_fc.get(str(g), np.nan) for g in genes], dtype=float)
     
     for i in range(len(genes)):
         de_results.append({
@@ -454,6 +500,9 @@ def main():
         logger.error(f"Failed to load H5AD file: {e}")
         sys.exit(1)
     
+    # Prepare DE-appropriate matrix before statistics.
+    adata = prepare_de_matrix(adata)
+
     # Load or generate contrasts
     if args.contrasts_file:
         contrasts_df = load_contrasts_file(args.contrasts_file)

@@ -214,15 +214,7 @@ nextflow run main.nf \
 Integrate multiple samples with Harmony:
 
 ```bash
-nextflow run main.nf   
-  -profile apocrita,singularity   
-  --input data_demo/MultiSample/samplesheet.csv   
-  --outdir results_dge_test   
-  --run_integration   
-  --batch_key batch   
-  --calculate_integration_metrics   
-  --run_dge   
-  --contrasts_file data_demo/MultiSample/contrasts_example.csv
+nextflow run main.nf  -profile apocrita,singularity   --input data_demo/MultiSample/H5AD/samplesheet.csv  --outdir results_dge   --run_integration   --batch_key batch   --calculate_integration_metrics   --run_dge   --contrasts_file data_demo/MultiSample/H5AD/contrasts_example.csv
 ```
 
 ### HPC Execution
