@@ -46,28 +46,21 @@ From raw counts to insights.
 
 scAnnex automates the complete workflow for single-cell RNA-seq analysis:
 
+- **Nextflow scRNA Analaysis Pipeline** — End-to-end pipeline in nextflow dsl2
+- **Interactive Dashboard** — Real-time exploration with R Shiny
 - **Quality Control** — Adaptive filtering with quantile-based thresholds
 - **Doublet Detection** — Scrublet integration for automated doublet removal
 - **Normalization** — Log-normalization and highly variable gene selection
 - **Batch Correction** — Harmony integration for multi-sample datasets
 - **Clustering** — Multi-resolution Leiden clustering
 - **Cell Annotation** — CellTypist integration with automatic model download
-- **Interactive Dashboard** — Real-time exploration with R Shiny
 - **Annotation Station** — Define cell types your way with rule-based annotation
+- **Differential Gene Expresion** — Multiple-contrast analysis through wilconxon
 
 
 ## Quick Start
 
-### Installation
-
-```bash
-# Install Nextflow:
-curl -s https://get.nextflow.io | bash
-sudo mv nextflow /usr/local/bin/
-```
-
 ### Test with Demo Data
-
 
 ```bash
 # 10x MTX format
@@ -75,7 +68,6 @@ nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results -
 ```
 
 ### Run with Your Data
-
 
 ```bash
 nextflow run main.nf \
@@ -235,29 +227,8 @@ nextflow run main.nf \
 nextflow run main.nf \
   -profile apocrita,singularity \
   --input /gpfs/scratch/$USER/data/samplesheet.csv \
-  --outdir /data/home/$USER/scannex_results  # <100GB: use home (permanent)
-  # --outdir /gpfs/scratch/$USER/results_large  # >100GB: use scratch (archive before 65 days)
+  --outdir /data/home/$USER/scannex_results  
 ```
-
-### Generate Execution Reports
-
-Generate HTML reports for pipeline execution analysis:
-
-```bash
-nextflow run main.nf \
-  -profile conda \
-  --input samplesheet.csv \
-  --outdir results \
-  -with-report \
-  -with-timeline \
-  -with-dag
-```
-
-Reports will be saved to `results/pipeline_info/`:
-- `execution_report.html` - Resource usage and task statistics
-- `execution_timeline.html` - Visual timeline of task execution
-- `pipeline_dag.html` - Directed acyclic graph of workflow
-- `execution_trace.txt` - Detailed trace (always generated)
 
 ---
 

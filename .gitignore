@@ -2,8 +2,7 @@
 .nextflow*
 work/
 results/
-test_no_equals/
-results_wave_*/
+results_*/
 *.html
 *.svg
 timeline*.html
@@ -11,14 +10,6 @@ report*.html
 trace*.txt
 dag*.html
 .nextflow.log*
-
-# Test data and results
-test_data/analytical_core_results/
-test_data/nextflow_test_results/
-test_data/test_output/
-test_data/*.h5ad
-test_data/*.rds
-test_data/*.log
 
 # Large data files
 *.h5ad
@@ -37,8 +28,6 @@ env/
 venv/
 ENV/
 .venv
-pip-log.txt
-pip-delete-this-directory.txt
 .pytest_cache/
 .coverage
 htmlcov/
@@ -48,14 +37,6 @@ htmlcov/
 .RData
 .Rproj.user
 *.Rproj
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
 
 # Docker
 .dockerignore
@@ -69,10 +50,6 @@ tmp/
 temp/
 *.tmp
 *.bak
-
-# Results directories (keep structure, ignore large outputs)
-results_*/
-!results_*/.gitkeep
 
 # Dashboard
 dashboard/*.sif
@@ -91,17 +68,6 @@ dashboard/update_paths.R
 .env.*
 credentials.json
 secrets.yaml
-
-# OS
-Thumbs.db
-.DS_Store
-
-# Development scripts (WSL2/Docker setup helpers)
-install_docker_wsl2.sh
-fix_docker_wsl2.sh
-start_docker.sh
-test_wave_profile.sh
-verify_docker_setup.sh
 
 # Internal documentation
 docs/internal/
