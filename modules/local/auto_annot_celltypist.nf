@@ -1,16 +1,16 @@
 process AUTO_ANNOT_CELLTYPIST {
-    tag "$meta.id"
+    tag "global_auto_annot_celltypist"
     label 'process_medium'
 
     conda "\"celltypist>=1.6\" \"scanpy>=1.9\""
     container "oras://community.wave.seqera.io/library/celltypist_scanpy:20c2e982b26fecc1"
 
     input:
-    tuple val(meta), path(h5ad)
+    path(h5ad)
 
     output:
-    tuple val(meta), path("*_annotated.h5ad"), emit: h5ad
-    path "*_celltypist.csv"                   , emit: annotations
+    path "celltypist_annotations.csv"         , emit: annotations
+    path "celltypist_status.json"             , emit: status_json
     path "versions.yml"                       , emit: versions
 
     when:
@@ -18,20 +18,18 @@ process AUTO_ANNOT_CELLTYPIST {
 
     script:
     def args = task.ext.args ?: ''
-    def prefix = task.ext.prefix ?: "${meta.id}"
-    
-    // SLC: Build CellTypist parameters
-    def model = params.celltypist_model ?: 'Immune_All_Low.pkl'
+    def models = params.celltypist_models ?: 'Immune_All_Low.pkl'
     def majority_voting = params.celltypist_majority_voting ? '--majority-voting' : ''
-    
+    def continue_on_error = params.auto_annot_continue_on_error ? '--continue-on-error' : ''
+
     """
-    # Run CellTypist annotation and save to H5AD
-    auto_annot_celltypist.py \\
-        --input ${h5ad} \\
-        --output ${prefix}_celltypist.csv \\
-        --output-h5ad ${prefix}_annotated.h5ad \\
-        --model ${model} \\
-        ${majority_voting} \\
+    python ${projectDir}/bin/auto_annot_celltypist.py \
+        --input ${h5ad} \
+        --output celltypist_annotations.csv \
+        --status celltypist_status.json \
+        --models "${models}" \
+        ${majority_voting} \
+        ${continue_on_error} \
         ${args}
 
     cat <<-END_VERSIONS > versions.yml
@@ -43,11 +41,16 @@ process AUTO_ANNOT_CELLTYPIST {
     """
 
     stub:
-    def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    touch ${prefix}_annotated.h5ad
-    echo "cell_id,label,score,tool" > ${prefix}_celltypist.csv
-    echo "cell1,T cells,0.95,celltypist" >> ${prefix}_celltypist.csv
+    echo "cell_id,auto_annot_celltypist_immune_all_low_pkl,auto_annot_celltypist_immune_all_low_pkl_score" > celltypist_annotations.csv
+    echo "cell1,T cells,0.95" >> celltypist_annotations.csv
+    cat <<-EOF > celltypist_status.json
+    {
+      "tool": "celltypist",
+      "success": true,
+      "message": "stub"
+    }
+    EOF
     touch versions.yml
     """
 }

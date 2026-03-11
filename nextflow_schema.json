@@ -402,26 +402,26 @@
             "properties": {
                 "run_auto_annotation": {
                     "type": "boolean",
-                    "default": false,
+                    "default": true,
                     "description": "Run automatic cell type annotation",
                     "fa_icon": "fas fa-tag"
                 },
-                "marker_list": {
-                    "type": "string",
-                    "description": "Path to marker gene list file",
-                    "fa_icon": "fas fa-list"
+                "auto_annot_continue_on_error": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Continue pipeline if one annotation tool fails",
+                    "fa_icon": "fas fa-life-ring"
                 },
-                "annotation_method": {
-                    "type": "string",
-                    "default": "celltypist",
-                    "enum": ["celltypist", "marker"],
-                    "description": "Annotation method to use",
-                    "fa_icon": "fas fa-dna"
+                "celltypist_enable": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable CellTypist annotation",
+                    "fa_icon": "fas fa-check-circle"
                 },
-                "celltypist_model": {
+                "celltypist_models": {
                     "type": "string",
-                    "default": "Immune_All_Low.pkl",
-                    "description": "CellTypist model to use for annotation",
+                    "default": "Immune_All_Low.pkl,Human_BoneMarrow.pkl",
+                    "description": "Comma-separated CellTypist models",
                     "fa_icon": "fas fa-brain"
                 },
                 "celltypist_majority_voting": {
@@ -429,6 +429,48 @@
                     "default": true,
                     "description": "Enable majority voting for CellTypist predictions",
                     "fa_icon": "fas fa-vote-yea"
+                },
+                "azimuth_enable": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable Azimuth annotation",
+                    "fa_icon": "fas fa-check-circle"
+                },
+                "azimuth_refs": {
+                    "type": "string",
+                    "default": "Human - PBMC,Human - Bone Marrow",
+                    "description": "Comma-separated Azimuth references (web names)",
+                    "fa_icon": "fas fa-database"
+                },
+                "singler_enable": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable SingleR annotation",
+                    "fa_icon": "fas fa-check-circle"
+                },
+                "singler_refs": {
+                    "type": "string",
+                    "default": "BlueprintEncodeData",
+                    "description": "Comma-separated SingleR celldex references",
+                    "fa_icon": "fas fa-database"
+                },
+                "singler_prune": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable SingleR pruned labels",
+                    "fa_icon": "fas fa-cut"
+                },
+                "sctype_enable": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable scType annotation",
+                    "fa_icon": "fas fa-check-circle"
+                },
+                "sctype_markers_file": {
+                    "type": "string",
+                    "description": "Path to scType markers CSV",
+                    "default": "assets/sctype_markers_mock.csv",
+                    "fa_icon": "fas fa-file-csv"
                 }
             }
         },

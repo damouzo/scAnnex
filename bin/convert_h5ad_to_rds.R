@@ -17,63 +17,101 @@
 #==============================================================================
 
 suppressPackageStartupMessages({
-    library(optparse)
     library(Seurat)
-    library(SeuratDisk)
+})
+
+# Prevent reticulate from creating managed uv environments inside HPC scratch/cache
+Sys.setenv(RETICULATE_USE_MANAGED_VENV = "no")
+
+python_bin <- Sys.which("python3")
+if (python_bin == "") {
+    python_bin <- Sys.which("python")
+}
+if (python_bin != "") {
+    Sys.setenv(RETICULATE_PYTHON = python_bin)
+}
+
+suppressPackageStartupMessages({
     library(reticulate)
 })
 
 #==============================================================================
 # Command Line Arguments
 #==============================================================================
+print_help <- function() {
+    cat("Convert H5AD (AnnData) to Seurat RDS object\n\n")
+    cat("Usage:\n")
+    cat("  Rscript convert_h5ad_to_rds.R --input integrated.h5ad --output seurat.rds [options]\n\n")
+    cat("Options:\n")
+    cat("  -i, --input FILE          Input H5AD file path (required)\n")
+    cat("  -o, --output FILE         Output RDS file path [default: seurat_object.rds]\n")
+    cat("      --assay-name STRING   Name for Seurat assay [default: RNA]\n")
+    cat("      --use-raw             Use .raw.X from H5AD instead of .X\n")
+    cat("      --min-cells INT       Minimum cells for feature filtering [default: 0]\n")
+    cat("      --min-features INT    Minimum features for cell filtering [default: 0]\n")
+    cat("      --verbose             Print detailed progress messages\n")
+    cat("  -h, --help                Show this help\n")
+}
 
-option_list <- list(
-    make_option(c("-i", "--input"), 
-                type = "character", 
-                default = NULL,
-                help = "Input H5AD file path", 
-                metavar = "FILE"),
-    
-    make_option(c("-o", "--output"), 
-                type = "character", 
-                default = "seurat_object.rds",
-                help = "Output RDS file path [default: %default]", 
-                metavar = "FILE"),
-    
-    make_option(c("--assay-name"), 
-                type = "character", 
-                default = "RNA",
-                help = "Name for the Seurat assay [default: %default]", 
-                metavar = "STRING"),
-    
-    make_option(c("--use-raw"), 
-                action = "store_true", 
-                default = FALSE,
-                help = "Use .raw.X from H5AD (raw counts) instead of .X"),
-    
-    make_option(c("--min-cells"), 
-                type = "integer", 
-                default = 0,
-                help = "Minimum cells for feature filtering [default: %default]"),
-    
-    make_option(c("--min-features"), 
-                type = "integer", 
-                default = 0,
-                help = "Minimum features for cell filtering [default: %default]"),
-    
-    make_option(c("--verbose"), 
-                action = "store_true", 
-                default = FALSE,
-                help = "Print detailed progress messages")
-)
+parse_args_simple <- function() {
+    argv <- commandArgs(trailingOnly = TRUE)
 
-opt_parser <- OptionParser(option_list = option_list,
-                           description = "\nConvert H5AD (AnnData) to Seurat RDS object")
-opt <- parse_args(opt_parser)
+    opt <- list(
+        input = NULL,
+        output = "seurat_object.rds",
+        `assay-name` = "RNA",
+        `use-raw` = FALSE,
+        `min-cells` = 0L,
+        `min-features` = 0L,
+        verbose = FALSE
+    )
+
+    i <- 1L
+    while (i <= length(argv)) {
+        arg <- argv[[i]]
+
+        if (arg %in% c("-h", "--help")) {
+            print_help()
+            quit(status = 0)
+        } else if (arg %in% c("-i", "--input")) {
+            i <- i + 1L
+            if (i > length(argv)) stop("Missing value for --input", call. = FALSE)
+            opt$input <- argv[[i]]
+        } else if (arg %in% c("-o", "--output")) {
+            i <- i + 1L
+            if (i > length(argv)) stop("Missing value for --output", call. = FALSE)
+            opt$output <- argv[[i]]
+        } else if (arg == "--assay-name") {
+            i <- i + 1L
+            if (i > length(argv)) stop("Missing value for --assay-name", call. = FALSE)
+            opt$`assay-name` <- argv[[i]]
+        } else if (arg == "--use-raw") {
+            opt$`use-raw` <- TRUE
+        } else if (arg == "--min-cells") {
+            i <- i + 1L
+            if (i > length(argv)) stop("Missing value for --min-cells", call. = FALSE)
+            opt$`min-cells` <- as.integer(argv[[i]])
+        } else if (arg == "--min-features") {
+            i <- i + 1L
+            if (i > length(argv)) stop("Missing value for --min-features", call. = FALSE)
+            opt$`min-features` <- as.integer(argv[[i]])
+        } else if (arg == "--verbose") {
+            opt$verbose <- TRUE
+        } else {
+            stop(sprintf("Unknown argument: %s", arg), call. = FALSE)
+        }
+
+        i <- i + 1L
+    }
+
+    opt
+}
+
+opt <- parse_args_simple()
 
 # Validate required arguments
 if (is.null(opt$input)) {
-    print_help(opt_parser)
+    print_help()
     stop("Input H5AD file is required (--input)", call. = FALSE)
 }
 
@@ -91,6 +129,23 @@ log_message <- function(msg) {
     }
 }
 
+py_to_dense_matrix <- function(py_obj) {
+    obj <- py_obj
+    if (py_has_attr(obj, "toarray")) {
+        obj <- obj$toarray()
+    }
+    mat <- py_to_r(obj)
+    if (!is.matrix(mat)) {
+        mat <- as.matrix(mat)
+    }
+    mat
+}
+
+py_to_char_vector <- function(py_obj) {
+    vals <- py_to_r(py_obj)
+    as.character(unlist(vals, use.names = FALSE))
+}
+
 #==============================================================================
 # Main Conversion Pipeline
 #==============================================================================
@@ -103,15 +158,23 @@ log_message(sprintf("Output: %s", opt$output))
 log_message("Loading H5AD file using Python anndata...")
 
 tryCatch({
+    if (python_bin != "") {
+        use_python(python_bin, required = TRUE)
+    }
+
+    if (!py_available(initialize = TRUE)) {
+        stop("Python runtime not available in container")
+    }
+
     # Import anndata
-    ad <- import("anndata")
+    ad <- import("anndata", convert = FALSE)
     
     # Read H5AD
     adata <- ad$read_h5ad(opt$input)
-    
-    log_message(sprintf("Loaded AnnData: %d cells x %d genes", 
-                       nrow(adata$obs), 
-                       nrow(adata$var)))
+
+    n_cells <- as.integer(py_to_r(adata$n_obs))
+    n_genes <- as.integer(py_to_r(adata$n_vars))
+    log_message(sprintf("Loaded AnnData: %d cells x %d genes", n_cells, n_genes))
     
 }, error = function(e) {
     stop(sprintf("Failed to load H5AD file: %s", e$message), call. = FALSE)
@@ -122,15 +185,15 @@ log_message("Extracting count matrix...")
 
 if (opt$`use-raw` && !is.null(adata$raw)) {
     log_message("Using .raw.X (raw counts)")
-    counts <- t(as.matrix(adata$raw$X))
-    var_names <- adata$raw$var_names$to_list()
+    counts <- t(py_to_dense_matrix(adata$raw$X))
+    var_names <- py_to_char_vector(adata$raw$var_names$to_list())
 } else {
     log_message("Using .X (processed matrix)")
-    counts <- t(as.matrix(adata$X))
-    var_names <- adata$var_names$to_list()
+    counts <- t(py_to_dense_matrix(adata$X))
+    var_names <- py_to_char_vector(adata$var_names$to_list())
 }
 
-obs_names <- adata$obs_names$to_list()
+obs_names <- py_to_char_vector(adata$obs_names$to_list())
 
 # Set row/column names
 rownames(counts) <- var_names
@@ -142,8 +205,23 @@ log_message(sprintf("Count matrix dimensions: %d genes x %d cells",
 # Step 3: Extract metadata
 log_message("Extracting cell metadata...")
 
-metadata <- as.data.frame(adata$obs)
-rownames(metadata) <- obs_names
+meta_tmp <- tempfile(pattern = "adata_obs_", fileext = ".csv")
+adata$obs$to_csv(meta_tmp, index = TRUE)
+metadata <- read.csv(meta_tmp, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
+unlink(meta_tmp)
+
+if (nrow(metadata) != length(obs_names)) {
+    stop(
+        sprintf(
+            "Metadata row count mismatch: %d rows in obs vs %d cells in matrix",
+            nrow(metadata),
+            length(obs_names)
+        ),
+        call. = FALSE
+    )
+}
+
+metadata <- metadata[obs_names, , drop = FALSE]
 
 log_message(sprintf("Metadata columns: %s", 
                    paste(colnames(metadata), collapse = ", ")))
@@ -152,26 +230,27 @@ log_message(sprintf("Metadata columns: %s",
 log_message("Checking for dimensional reductions...")
 
 reductions <- list()
+obsm_keys <- py_to_char_vector(adata$obsm_keys())
 
-if ("X_pca" %in% names(adata$obsm)) {
+if ("X_pca" %in% obsm_keys) {
     log_message("Found PCA coordinates")
-    pca_coords <- as.matrix(adata$obsm[["X_pca"]])
+    pca_coords <- py_to_dense_matrix(adata$obsm[["X_pca"]])
     rownames(pca_coords) <- obs_names
     colnames(pca_coords) <- paste0("PC_", 1:ncol(pca_coords))
     reductions$pca <- pca_coords
 }
 
-if ("X_pca_harmony" %in% names(adata$obsm)) {
+if ("X_pca_harmony" %in% obsm_keys) {
     log_message("Found Harmony-corrected PCA coordinates")
-    harmony_coords <- as.matrix(adata$obsm[["X_pca_harmony"]])
+    harmony_coords <- py_to_dense_matrix(adata$obsm[["X_pca_harmony"]])
     rownames(harmony_coords) <- obs_names
     colnames(harmony_coords) <- paste0("harmony_", 1:ncol(harmony_coords))
     reductions$harmony <- harmony_coords
 }
 
-if ("X_umap" %in% names(adata$obsm)) {
+if ("X_umap" %in% obsm_keys) {
     log_message("Found UMAP coordinates")
-    umap_coords <- as.matrix(adata$obsm[["X_umap"]])
+    umap_coords <- py_to_dense_matrix(adata$obsm[["X_umap"]])
     rownames(umap_coords) <- obs_names
     colnames(umap_coords) <- paste0("UMAP_", 1:ncol(umap_coords))
     reductions$umap <- umap_coords
@@ -216,10 +295,10 @@ tryCatch({
     
     # Step 6: Add normalized data if available
     if (opt$`use-raw` == FALSE) {
-        log_message("Adding normalized data to 'data' slot")
+        log_message("Adding normalized data to 'data' layer")
         seurat_obj <- SetAssayData(
             seurat_obj,
-            slot = "data",
+            layer = "data",
             new.data = counts  # Already normalized in H5AD .X
         )
     }

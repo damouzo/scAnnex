@@ -1,0 +1,9 @@
+cell_type,gene,weight
+T_cells,CD3D,1.0
+T_cells,CD3E,1.0
+B_cells,MS4A1,1.0
+B_cells,CD79A,1.0
+Monocytes,LYZ,1.0
+Monocytes,S100A8,1.0
+NK_cells,NKG7,1.0
+NK_cells,GNLY,1.0

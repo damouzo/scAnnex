@@ -32,6 +32,7 @@ import pandas as pd
 import scanpy as sc
 import seaborn as sns
 import anndata as ad
+from scipy import sparse
 
 # Enable writing of nullable strings (required for anndata >= 0.11)
 # Only set if available (older versions don't have this attribute)
@@ -215,16 +216,62 @@ def normalize_data(
         Normalized AnnData object
     """
     logger.info(f"Normalizing data (method: {method}, target_sum: {target_sum})...")
+
+    def _sanitize_matrix(matrix, clip_negative: bool = False):
+        """Replace non-finite values and optionally clip negatives to zero."""
+        if sparse.issparse(matrix):
+            matrix = matrix.copy()
+            data = matrix.data
+            nonfinite_mask = ~np.isfinite(data)
+            if np.any(nonfinite_mask):
+                data[nonfinite_mask] = 0.0
+            if clip_negative:
+                negative_mask = data < 0
+                if np.any(negative_mask):
+                    data[negative_mask] = 0.0
+            return matrix
+
+        dense = np.asarray(matrix).copy()
+        nonfinite_mask = ~np.isfinite(dense)
+        if np.any(nonfinite_mask):
+            dense[nonfinite_mask] = 0.0
+        if clip_negative:
+            negative_mask = dense < 0
+            if np.any(negative_mask):
+                dense[negative_mask] = 0.0
+        return dense
     
     # Ensure raw counts are preserved in layers
     if 'counts' not in adata.layers:
         logger.info("  Storing raw counts in .layers['counts']")
         adata.layers['counts'] = adata.X.copy()
+
+    # Normalize from counts layer to avoid re-normalizing scaled/transformed X
+    adata.layers['counts'] = _sanitize_matrix(adata.layers['counts'], clip_negative=True)
+    adata.X = adata.layers['counts'].copy()
+
+    # Guard against invalid rows/columns that can produce NaNs downstream
+    counts_matrix = adata.layers['counts']
+    cell_totals = np.asarray(counts_matrix.sum(axis=1)).ravel()
+    valid_cells = np.isfinite(cell_totals) & (cell_totals > 0)
+    if not np.all(valid_cells):
+        removed = int((~valid_cells).sum())
+        logger.warning(f"  Removing {removed} cells with non-finite or zero total counts")
+        adata = adata[valid_cells].copy()
+        counts_matrix = adata.layers['counts']
+
+    gene_totals = np.asarray(counts_matrix.sum(axis=0)).ravel()
+    valid_genes = np.isfinite(gene_totals) & (gene_totals > 0)
+    if not np.all(valid_genes):
+        removed = int((~valid_genes).sum())
+        logger.warning(f"  Removing {removed} genes with non-finite or zero total counts")
+        adata = adata[:, valid_genes].copy()
     
     if method == "log":
         # Standard log normalization
         sc.pp.normalize_total(adata, target_sum=target_sum)
         sc.pp.log1p(adata)
+        adata.X = _sanitize_matrix(adata.X, clip_negative=False)
         logger.info(f"  ✓ Log normalization complete")
         
     elif method == "scran":
@@ -232,11 +279,13 @@ def normalize_data(
         try:
             import scanpy.external as sce
             sce.pp.scran_normalization(adata)
+            adata.X = _sanitize_matrix(adata.X, clip_negative=False)
             logger.info(f"  ✓ Scran normalization complete")
         except ImportError:
             logger.warning("  ⚠ scran not available, falling back to log normalization")
             sc.pp.normalize_total(adata, target_sum=target_sum)
             sc.pp.log1p(adata)
+            adata.X = _sanitize_matrix(adata.X, clip_negative=False)
     
     return adata
 
@@ -256,12 +305,38 @@ def select_highly_variable_genes(
     """
     logger.info(f"Selecting {n_top_genes} highly variable genes...")
     
-    sc.pp.highly_variable_genes(
-        adata,
-        n_top_genes=n_top_genes,
-        flavor='seurat',
-        subset=False  # Keep all genes, mark HVGs
-    )
+    try:
+        sc.pp.highly_variable_genes(
+            adata,
+            n_top_genes=n_top_genes,
+            flavor='seurat',
+            subset=False  # Keep all genes, mark HVGs
+        )
+    except ValueError as e:
+        logger.warning(f"  HVG selection with scanpy failed: {e}")
+        logger.warning("  Falling back to variance-based HVG selection")
+
+        X = adata.X
+        if sparse.issparse(X):
+            gene_variances = np.asarray(X.power(2).mean(axis=0) - np.square(X.mean(axis=0))).ravel()
+        else:
+            gene_variances = np.var(np.asarray(X), axis=0)
+
+        gene_variances = np.asarray(gene_variances).ravel()
+        gene_variances[~np.isfinite(gene_variances)] = -np.inf
+
+        n_select = min(int(n_top_genes), adata.n_vars)
+        if n_select <= 0:
+            raise RuntimeError("No genes available for HVG selection after preprocessing")
+
+        top_idx = np.argpartition(gene_variances, -n_select)[-n_select:]
+        hvg_mask = np.zeros(adata.n_vars, dtype=bool)
+        hvg_mask[top_idx] = True
+
+        adata.var['highly_variable'] = hvg_mask
+        adata.var['highly_variable_rank'] = np.nan
+        ranking_order = np.argsort(gene_variances[top_idx])[::-1]
+        adata.var.iloc[top_idx[ranking_order], adata.var.columns.get_loc('highly_variable_rank')] = np.arange(n_select)
     
     n_hvg = adata.var['highly_variable'].sum()
     logger.info(f"  ✓ Identified {n_hvg} highly variable genes")
@@ -288,6 +363,17 @@ def scale_and_pca(
     
     # Scale using HVGs only
     sc.pp.scale(adata, max_value=max_value)
+
+    # Ensure PCA input is finite
+    if sparse.issparse(adata.X):
+        adata.X.data[~np.isfinite(adata.X.data)] = 0.0
+    else:
+        X_dense = np.asarray(adata.X)
+        nonfinite_mask = ~np.isfinite(X_dense)
+        if np.any(nonfinite_mask):
+            logger.warning("  Found non-finite values after scaling; replacing with 0")
+            X_dense[nonfinite_mask] = 0.0
+            adata.X = X_dense
     
     # Compute PCA
     sc.tl.pca(adata, n_comps=n_pcs, svd_solver='arpack')

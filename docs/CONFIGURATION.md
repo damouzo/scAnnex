@@ -88,7 +88,27 @@ Choose between Leiden or Louvain:
 
 ## Cell Type Annotation
 
-### CellTypist
+### Multi-Tool Auto-Annotation (Global)
+
+Auto-annotation now runs on a global object and supports four tools in parallel.
+
+```bash
+nextflow run main.nf \
+  --input samplesheet.csv \
+  --run_auto_annotation true \
+  --celltypist_enable true \
+  --azimuth_enable true \
+  --singler_enable true \
+  --sctype_enable true
+```
+
+If one tool fails and you want to continue with the others:
+
+```bash
+--auto_annot_continue_on_error true
+```
+
+### CellTypist (multi-model)
 
 Automatic annotation with pre-trained models:
 
@@ -96,24 +116,44 @@ Automatic annotation with pre-trained models:
 nextflow run main.nf \
   --input samplesheet.csv \
   --run_auto_annotation \
-  --celltypist_model Immune_All_Low.pkl \
+  --celltypist_models 'Immune_All_Low.pkl,Human_BoneMarrow.pkl' \
   --celltypist_majority_voting true
 ```
 
-**Available models:**
-- `Immune_All_Low.pkl` - Pan-immune, low resolution
-- `Immune_All_High.pkl` - Pan-immune, high resolution
-- Custom models from CellTypist repository
+### Azimuth (R, multi-reference)
 
-### Marker-Based Annotation
-
-Use custom marker lists:
+Use web-style reference names separated by commas:
 
 ```bash
 nextflow run main.nf \
   --input samplesheet.csv \
-  --annotation_method marker_based \
-  --marker_list markers.csv
+  --azimuth_enable true \
+  --azimuth_refs 'Human - PBMC,Human - Bone Marrow'
+```
+
+The pipeline maps these names internally to Azimuth reference IDs.
+
+### SingleR (R, multi-reference)
+
+Use celldex references as a comma-separated list:
+
+```bash
+nextflow run main.nf \
+  --input samplesheet.csv \
+  --singler_enable true \
+  --singler_refs 'BlueprintEncodeData,HumanPrimaryCellAtlasData' \
+  --singler_prune true
+```
+
+### scType (R)
+
+Use a marker file (CSV) path:
+
+```bash
+nextflow run main.nf \
+  --input samplesheet.csv \
+  --sctype_enable true \
+  --sctype_markers_file assets/sctype_markers_mock.csv
 ```
 
 ## Resource Management

@@ -9,6 +9,13 @@ include { QUALITY_CONTROL         } from '../modules/local/quality_control'
 include { DOUBLET_DETECTION       } from '../modules/local/doublet_detection'
 include { STANDARD_PROCESSING     } from '../modules/local/standard_processing'
 include { AUTO_ANNOT_CELLTYPIST   } from '../modules/local/auto_annot_celltypist'
+include { AUTO_ANNOT_H5AD_TO_RDS as AUTO_ANNOT_H5AD_TO_RDS_AZIMUTH } from '../modules/local/auto_annot_h5ad_to_rds'
+include { AUTO_ANNOT_H5AD_TO_RDS as AUTO_ANNOT_H5AD_TO_RDS_SINGLER } from '../modules/local/auto_annot_h5ad_to_rds'
+include { AUTO_ANNOT_H5AD_TO_RDS as AUTO_ANNOT_H5AD_TO_RDS_SCTYPE } from '../modules/local/auto_annot_h5ad_to_rds'
+include { AUTO_ANNOT_SCTYPE       } from '../modules/local/auto_annot_sctype'
+include { AUTO_ANNOT_AZIMUTH      } from '../modules/local/auto_annot_azimuth'
+include { AUTO_ANNOT_SINGLER      } from '../modules/local/auto_annot_singler'
+include { AUTO_ANNOT_SUMMARIZE    } from '../modules/local/auto_annot_summarize'
 include { INTEGRATE_HARMONYPY     } from '../modules/local/integrate_harmonypy'
 include { MERGE_SAMPLES           } from '../modules/local/merge_samples'
 include { DIFFERENTIAL_EXPRESSION } from '../modules/local/differential_expression'
@@ -89,58 +96,125 @@ workflow SCANNEX {
     )
     
     //
-    // STEP 5: Auto-Annotation with CellTypist (SLC)
+    // STEP 5: Integration (Optional - global multi-sample Harmony)
     //
-    def annotated_output = STANDARD_PROCESSING.out.h5ad
-    
-    if (params.run_auto_annotation) {
-        AUTO_ANNOT_CELLTYPIST (
-            annotated_output
-        )
-        annotated_output = AUTO_ANNOT_CELLTYPIST.out.h5ad
-    }
-    
-    //
-    // STEP 6: Integration (Optional - global multi-sample Harmony)
-    //
-    def final_output = annotated_output
-    
+    def base_annotation_h5ad
+
     if (params.run_integration && params.batch_key) {
-        def integration_inputs = annotated_output.map { _meta, h5ad -> h5ad }.collect()
+        def integration_inputs = STANDARD_PROCESSING.out.h5ad.map { _meta, h5ad -> h5ad }.collect()
         def split_script = file("${projectDir}/bin/split_integrated_by_sample.py", checkIfExists: true)
         INTEGRATE_HARMONYPY (
             integration_inputs,
             split_script
         )
-        final_output = INTEGRATE_HARMONYPY.out.h5ad.map { h5ad -> [[:], h5ad] }
+        base_annotation_h5ad = INTEGRATE_HARMONYPY.out.h5ad
+    } else {
+        def h5ad_files = STANDARD_PROCESSING.out.h5ad.map { _meta, h5ad -> h5ad }.collect()
+        MERGE_SAMPLES (
+            h5ad_files
+        )
+        base_annotation_h5ad = MERGE_SAMPLES.out.h5ad
     }
-    
+
     //
-    // STEP 6.5: Merge samples (for DGE across conditions)
+    // STEP 6: Auto-Annotation (Global object, multi-tool in parallel)
+    //
+    def annotated_h5ad = base_annotation_h5ad
+
+    if (params.run_auto_annotation) {
+        def empty_annotations = Channel.fromPath("${projectDir}/assets/empty_annotations.csv", checkIfExists: true)
+        def empty_status_json = Channel.fromPath("${projectDir}/assets/empty_status.json", checkIfExists: true)
+
+        def celltypist_annotations_ch
+        def celltypist_status_ch
+        def azimuth_annotations_ch
+        def azimuth_status_ch
+        def singler_annotations_ch
+        def singler_status_ch
+        def sctype_annotations_ch
+        def sctype_status_ch
+
+        if (params.celltypist_enable) {
+            AUTO_ANNOT_CELLTYPIST (
+                base_annotation_h5ad.map { h5ad -> h5ad }
+            )
+            celltypist_annotations_ch = AUTO_ANNOT_CELLTYPIST.out.annotations
+            celltypist_status_ch = AUTO_ANNOT_CELLTYPIST.out.status_json
+        } else {
+            celltypist_annotations_ch = empty_annotations
+            celltypist_status_ch = empty_status_json
+        }
+
+        if (params.azimuth_enable) {
+            AUTO_ANNOT_H5AD_TO_RDS_AZIMUTH (
+                base_annotation_h5ad.map { h5ad -> h5ad }
+            )
+            AUTO_ANNOT_AZIMUTH (
+                AUTO_ANNOT_H5AD_TO_RDS_AZIMUTH.out.rds
+            )
+            azimuth_annotations_ch = AUTO_ANNOT_AZIMUTH.out.annotations
+            azimuth_status_ch = AUTO_ANNOT_AZIMUTH.out.status_json
+        } else {
+            azimuth_annotations_ch = empty_annotations
+            azimuth_status_ch = empty_status_json
+        }
+
+        if (params.singler_enable) {
+            AUTO_ANNOT_H5AD_TO_RDS_SINGLER (
+                base_annotation_h5ad.map { h5ad -> h5ad }
+            )
+            AUTO_ANNOT_SINGLER (
+                AUTO_ANNOT_H5AD_TO_RDS_SINGLER.out.rds
+            )
+            singler_annotations_ch = AUTO_ANNOT_SINGLER.out.annotations
+            singler_status_ch = AUTO_ANNOT_SINGLER.out.status_json
+        } else {
+            singler_annotations_ch = empty_annotations
+            singler_status_ch = empty_status_json
+        }
+
+        if (params.sctype_enable) {
+            AUTO_ANNOT_H5AD_TO_RDS_SCTYPE (
+                base_annotation_h5ad.map { h5ad -> h5ad }
+            )
+            AUTO_ANNOT_SCTYPE (
+                AUTO_ANNOT_H5AD_TO_RDS_SCTYPE.out.rds
+            )
+            sctype_annotations_ch = AUTO_ANNOT_SCTYPE.out.annotations
+            sctype_status_ch = AUTO_ANNOT_SCTYPE.out.status_json
+        } else {
+            sctype_annotations_ch = empty_annotations
+            sctype_status_ch = empty_status_json
+        }
+
+        AUTO_ANNOT_SUMMARIZE (
+            base_annotation_h5ad.map { h5ad -> h5ad },
+            celltypist_annotations_ch,
+            celltypist_status_ch,
+            sctype_annotations_ch,
+            sctype_status_ch,
+            azimuth_annotations_ch,
+            azimuth_status_ch,
+            singler_annotations_ch,
+            singler_status_ch
+        )
+
+        annotated_h5ad = AUTO_ANNOT_SUMMARIZE.out.h5ad
+    }
+
+    //
+    // STEP 7: Differential Expression Analysis
     //
     if (params.run_dge) {
-        def dge_input_h5ad
-
-        if (params.run_integration && params.batch_key) {
-            dge_input_h5ad = final_output.map { _meta, h5ad -> h5ad }
-        } else {
-            // If integration is disabled, merge per-sample objects for DGE
-            def h5ad_files = final_output.map { _meta, h5ad -> h5ad }.collect()
-            MERGE_SAMPLES (
-                h5ad_files
-            )
-            dge_input_h5ad = MERGE_SAMPLES.out.h5ad
-            final_output = MERGE_SAMPLES.out.h5ad.map { h5ad -> [[:], h5ad] }
-        }
-        
-        // STEP 7: Differential Expression Analysis
         DIFFERENTIAL_EXPRESSION (
-            dge_input_h5ad,
+            annotated_h5ad,
             params.contrasts_file ? 
                 channel.fromPath(params.contrasts_file, checkIfExists: true) :
                 channel.value(file('NO_FILE'))
         )
     }
+
+    def final_output = annotated_h5ad.map { h5ad -> [[:], h5ad] }
     
     //
     // STEP 8: Launch Interactive Dashboard (Optional - enabled by default)
