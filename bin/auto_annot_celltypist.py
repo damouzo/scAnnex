@@ -72,9 +72,12 @@ def main():
     status = {
         "tool": "celltypist",
         "success": True,
+        "partial_success": False,
         "models": [],
         "errors": [],
     }
+
+    success_count = 0
 
     for model_name in models_list:
         model_slug = slugify_model(model_name)
@@ -85,15 +88,21 @@ def main():
             out_df[label_col] = labels.values
             out_df[score_col] = scores.values
             status["models"].append({"model": model_name, "success": True})
+            success_count += 1
         except Exception as exc:
+            out_df[label_col] = pd.Series(pd.NA, index=out_df.index, dtype="string")
+            out_df[score_col] = pd.Series(float("nan"), index=out_df.index, dtype="float64")
             status["models"].append({"model": model_name, "success": False})
             status["errors"].append(f"{model_name}: {exc}")
+            status["success"] = False
             if not args.continue_on_error:
-                status["success"] = False
                 break
 
-    if len(out_df.columns) == 0:
+    if len(out_df.columns) == 0 or success_count == 0:
         status["success"] = False
+
+    if success_count > 0 and success_count < len(models_list):
+        status["partial_success"] = True
 
     out_df.reset_index().to_csv(args.output, index=False)
     with open(args.status, "w", encoding="utf-8") as handle:

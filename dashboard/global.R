@@ -907,10 +907,15 @@ DEFAULT_SAMPLE_H5AD_FILES <- setNames(character(0), character(0))
 
 if (dir.exists(DEFAULT_DATA_PATH)) {
   # Prefer global integrated output for multi-sample runs
+  auto_annot_candidate <- file.path(DEFAULT_DATA_PATH, "auto_annot", "auto_annotated_global.h5ad")
   integrated_candidate <- file.path(DEFAULT_DATA_PATH, "integrated", "integrated.h5ad")
   merged_candidate <- file.path(DEFAULT_DATA_PATH, "merged", "merged_samples.h5ad")
 
-  if (file.exists(integrated_candidate)) {
+  if (file.exists(auto_annot_candidate)) {
+    DEFAULT_MERGED_H5AD <- auto_annot_candidate
+    DEFAULT_H5AD_FILE <- DEFAULT_MERGED_H5AD
+    message(sprintf("  Auto-detected auto-annotated H5AD: %s", basename(DEFAULT_MERGED_H5AD)))
+  } else if (file.exists(integrated_candidate)) {
     DEFAULT_MERGED_H5AD <- integrated_candidate
     DEFAULT_H5AD_FILE <- DEFAULT_MERGED_H5AD
     message(sprintf("  Auto-detected integrated H5AD: %s", basename(DEFAULT_MERGED_H5AD)))

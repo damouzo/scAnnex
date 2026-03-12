@@ -438,8 +438,8 @@
                 },
                 "azimuth_refs": {
                     "type": "string",
-                    "default": "Human - PBMC,Human - Bone Marrow",
-                    "description": "Comma-separated Azimuth references (web names)",
+                    "default": "pbmcref",
+                    "description": "Comma-separated Azimuth reference codes (allowed: pbmcref, bonemarrowref)",
                     "fa_icon": "fas fa-database"
                 },
                 "singler_enable": {

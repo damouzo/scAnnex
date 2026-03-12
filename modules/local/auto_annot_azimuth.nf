@@ -2,7 +2,7 @@ process AUTO_ANNOT_AZIMUTH {
     tag "global_auto_annot_azimuth"
     label 'process_medium'
 
-    conda "\"r-azimuth=0.5.0\" \"r-seurat=5.4.0\" \"r-optparse\" \"r-jsonlite\""
+    conda "\"r-azimuth=0.5.0\" \"r-azimuthdata\" \"r-seuratdata\" \"r-seurat=5.4.0\" \"r-optparse\" \"r-jsonlite\""
     container "oras://community.wave.seqera.io/library/r-azimuth_r-seurat:de4d206e2e153ec1"
 
     input:
@@ -18,7 +18,7 @@ process AUTO_ANNOT_AZIMUTH {
 
     script:
     def args = task.ext.args ?: ''
-    def refs = params.azimuth_refs ?: 'Human - PBMC'
+    def refs = params.azimuth_refs ?: 'pbmcref'
     def continue_on_error = params.auto_annot_continue_on_error ? '--continue-on-error' : ''
     """
     Rscript ${projectDir}/bin/auto_annot_azimuth.R \

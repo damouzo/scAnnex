@@ -286,7 +286,12 @@ def normalize_data(
             sc.pp.normalize_total(adata, target_sum=target_sum)
             sc.pp.log1p(adata)
             adata.X = _sanitize_matrix(adata.X, clip_negative=False)
-    
+
+    # Preserve log-normalized matrix before scale_and_pca() overwrites adata.X.
+    # R annotation tools (Azimuth, SingleR) read this layer from the Seurat object.
+    adata.layers['log1p_norm'] = adata.X.copy()
+    logger.info("  Stored log-normalized matrix in .layers['log1p_norm']")
+
     return adata
 
 
@@ -1022,6 +1027,13 @@ def main():
         logger.info("─" * 70)
         adata = normalize_data(adata, args.normalization_method, args.target_sum)
         
+        # Preserve log-normalized data before scale_and_pca() overwrites adata.X
+        # with z-scored values. Downstream annotation tools (CellTypist, the
+        # H5AD→RDS converter for Azimuth/SingleR) need the log-normalized matrix.
+        if 'normalized' not in adata.layers:
+            logger.info("  Storing log-normalized data in .layers['normalized']")
+            adata.layers['normalized'] = adata.X.copy()
+
         # Step 2: Feature selection
         logger.info("\n" + "─" * 70)
         logger.info("STEP 2: Highly Variable Genes Selection")

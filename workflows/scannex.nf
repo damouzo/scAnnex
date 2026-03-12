@@ -9,9 +9,7 @@ include { QUALITY_CONTROL         } from '../modules/local/quality_control'
 include { DOUBLET_DETECTION       } from '../modules/local/doublet_detection'
 include { STANDARD_PROCESSING     } from '../modules/local/standard_processing'
 include { AUTO_ANNOT_CELLTYPIST   } from '../modules/local/auto_annot_celltypist'
-include { AUTO_ANNOT_H5AD_TO_RDS as AUTO_ANNOT_H5AD_TO_RDS_AZIMUTH } from '../modules/local/auto_annot_h5ad_to_rds'
-include { AUTO_ANNOT_H5AD_TO_RDS as AUTO_ANNOT_H5AD_TO_RDS_SINGLER } from '../modules/local/auto_annot_h5ad_to_rds'
-include { AUTO_ANNOT_H5AD_TO_RDS as AUTO_ANNOT_H5AD_TO_RDS_SCTYPE } from '../modules/local/auto_annot_h5ad_to_rds'
+include { AUTO_ANNOT_H5AD_TO_RDS  } from '../modules/local/auto_annot_h5ad_to_rds'
 include { AUTO_ANNOT_SCTYPE       } from '../modules/local/auto_annot_sctype'
 include { AUTO_ANNOT_AZIMUTH      } from '../modules/local/auto_annot_azimuth'
 include { AUTO_ANNOT_SINGLER      } from '../modules/local/auto_annot_singler'
@@ -133,6 +131,15 @@ workflow SCANNEX {
         def singler_status_ch
         def sctype_annotations_ch
         def sctype_status_ch
+        def auto_annot_rds_ch
+
+        def run_any_r_annotator = params.azimuth_enable || params.singler_enable || params.sctype_enable
+        if (run_any_r_annotator) {
+            AUTO_ANNOT_H5AD_TO_RDS (
+                base_annotation_h5ad
+            )
+            auto_annot_rds_ch = AUTO_ANNOT_H5AD_TO_RDS.out.rds
+        }
 
         if (params.celltypist_enable) {
             AUTO_ANNOT_CELLTYPIST (
@@ -146,11 +153,8 @@ workflow SCANNEX {
         }
 
         if (params.azimuth_enable) {
-            AUTO_ANNOT_H5AD_TO_RDS_AZIMUTH (
-                base_annotation_h5ad.map { h5ad -> h5ad }
-            )
             AUTO_ANNOT_AZIMUTH (
-                AUTO_ANNOT_H5AD_TO_RDS_AZIMUTH.out.rds
+                auto_annot_rds_ch
             )
             azimuth_annotations_ch = AUTO_ANNOT_AZIMUTH.out.annotations
             azimuth_status_ch = AUTO_ANNOT_AZIMUTH.out.status_json
@@ -160,11 +164,8 @@ workflow SCANNEX {
         }
 
         if (params.singler_enable) {
-            AUTO_ANNOT_H5AD_TO_RDS_SINGLER (
-                base_annotation_h5ad.map { h5ad -> h5ad }
-            )
             AUTO_ANNOT_SINGLER (
-                AUTO_ANNOT_H5AD_TO_RDS_SINGLER.out.rds
+                auto_annot_rds_ch
             )
             singler_annotations_ch = AUTO_ANNOT_SINGLER.out.annotations
             singler_status_ch = AUTO_ANNOT_SINGLER.out.status_json
@@ -174,11 +175,8 @@ workflow SCANNEX {
         }
 
         if (params.sctype_enable) {
-            AUTO_ANNOT_H5AD_TO_RDS_SCTYPE (
-                base_annotation_h5ad.map { h5ad -> h5ad }
-            )
             AUTO_ANNOT_SCTYPE (
-                AUTO_ANNOT_H5AD_TO_RDS_SCTYPE.out.rds
+                auto_annot_rds_ch
             )
             sctype_annotations_ch = AUTO_ANNOT_SCTYPE.out.annotations
             sctype_status_ch = AUTO_ANNOT_SCTYPE.out.status_json

@@ -146,6 +146,8 @@ py_to_char_vector <- function(py_obj) {
     as.character(unlist(vals, use.names = FALSE))
 }
 
+
+
 #==============================================================================
 # Main Conversion Pipeline
 #==============================================================================
@@ -157,50 +159,34 @@ log_message(sprintf("Output: %s", opt$output))
 # Step 1: Load H5AD using reticulate + anndata
 log_message("Loading H5AD file using Python anndata...")
 
-tryCatch({
-    if (python_bin != "") {
-        use_python(python_bin, required = TRUE)
-    }
-
-    if (!py_available(initialize = TRUE)) {
-        stop("Python runtime not available in container")
-    }
-
-    # Import anndata
-    ad <- import("anndata", convert = FALSE)
-    
-    # Read H5AD
-    adata <- ad$read_h5ad(opt$input)
-
-    n_cells <- as.integer(py_to_r(adata$n_obs))
-    n_genes <- as.integer(py_to_r(adata$n_vars))
-    log_message(sprintf("Loaded AnnData: %d cells x %d genes", n_cells, n_genes))
-    
-}, error = function(e) {
-    stop(sprintf("Failed to load H5AD file: %s", e$message), call. = FALSE)
-})
-
-# Step 2: Extract count matrix
-log_message("Extracting count matrix...")
-
-if (opt$`use-raw` && !is.null(adata$raw)) {
-    log_message("Using .raw.X (raw counts)")
-    counts <- t(py_to_dense_matrix(adata$raw$X))
-    var_names <- py_to_char_vector(adata$raw$var_names$to_list())
-} else {
-    log_message("Using .X (processed matrix)")
-    counts <- t(py_to_dense_matrix(adata$X))
-    var_names <- py_to_char_vector(adata$var_names$to_list())
+if (python_bin != "") {
+    use_python(python_bin, required = TRUE)
+}
+if (!py_available(initialize = TRUE)) {
+    stop("Python runtime not available in container", call. = FALSE)
 }
 
-obs_names <- py_to_char_vector(adata$obs_names$to_list())
+ad <- import("anndata", convert = FALSE)
+adata <- ad$read_h5ad(opt$input)
+log_message(sprintf("Loaded AnnData: %d cells x %d genes",
+    as.integer(py_to_r(adata$n_obs)), as.integer(py_to_r(adata$n_vars))))
 
-# Set row/column names
+# Step 2: Extract matrices from pipeline layers
+# Schema (guaranteed after unify_input.py): layers['counts'] = raw counts, layers['log1p_norm'] = log-normalized
+log_message("Extracting expression matrices...")
+
+obs_names <- py_to_char_vector(adata$obs_names$to_list())
+var_names <- py_to_char_vector(adata$var_names$to_list())
+
+counts <- t(py_to_dense_matrix(adata$layers[["counts"]]))
 rownames(counts) <- var_names
 colnames(counts) <- obs_names
 
-log_message(sprintf("Count matrix dimensions: %d genes x %d cells", 
-                   nrow(counts), ncol(counts)))
+data_matrix <- t(py_to_dense_matrix(adata$layers[["log1p_norm"]]))
+rownames(data_matrix) <- var_names
+colnames(data_matrix) <- obs_names
+
+log_message(sprintf("Matrix dimensions: %d genes x %d cells", length(var_names), length(obs_names)))
 
 # Step 3: Extract metadata
 log_message("Extracting cell metadata...")
@@ -259,64 +245,40 @@ if ("X_umap" %in% obsm_keys) {
 # Step 5: Create Seurat object
 log_message("Creating Seurat object...")
 
-tryCatch({
-    # Create Seurat object with counts
-    seurat_obj <- CreateSeuratObject(
-        counts = counts,
-        meta.data = metadata,
-        assay = opt$`assay-name`,
-        min.cells = opt$`min-cells`,
-        min.features = opt$`min-features`
+seurat_obj <- CreateSeuratObject(
+    counts = counts,
+    meta.data = metadata,
+    assay = opt$`assay-name`,
+    min.cells = opt$`min-cells`,
+    min.features = opt$`min-features`
+)
+
+log_message(sprintf("Created Seurat object: %d cells x %d genes", ncol(seurat_obj), nrow(seurat_obj)))
+
+for (reduction_name in names(reductions)) {
+    log_message(sprintf("Adding %s reduction", reduction_name))
+    reduction_coords <- reductions[[reduction_name]][colnames(seurat_obj), , drop = FALSE]
+    seurat_obj[[reduction_name]] <- CreateDimReducObject(
+        embeddings = reduction_coords,
+        key = paste0(toupper(substring(reduction_name, 1, 1)), substring(reduction_name, 2), "_"),
+        assay = opt$`assay-name`
     )
-    
-    log_message(sprintf("Created Seurat object: %d cells x %d genes", 
-                       ncol(seurat_obj), nrow(seurat_obj)))
-    
-    # Add dimensional reductions
-    if (length(reductions) > 0) {
-        for (reduction_name in names(reductions)) {
-            log_message(sprintf("Adding %s reduction", reduction_name))
-            
-            # Filter coordinates to match cells in Seurat object
-            reduction_coords <- reductions[[reduction_name]]
-            reduction_coords <- reduction_coords[colnames(seurat_obj), , drop = FALSE]
-            
-            # Create DimReduc object
-            reduction_obj <- CreateDimReducObject(
-                embeddings = reduction_coords,
-                key = paste0(toupper(substring(reduction_name, 1, 1)), 
-                           substring(reduction_name, 2), "_"),
-                assay = opt$`assay-name`
-            )
-            
-            seurat_obj[[reduction_name]] <- reduction_obj
-        }
-    }
-    
-    # Step 6: Add normalized data if available
-    if (opt$`use-raw` == FALSE) {
-        log_message("Adding normalized data to 'data' layer")
-        seurat_obj <- SetAssayData(
-            seurat_obj,
-            layer = "data",
-            new.data = counts  # Already normalized in H5AD .X
-        )
-    }
-    
-}, error = function(e) {
-    stop(sprintf("Failed to create Seurat object: %s", e$message), call. = FALSE)
-})
+}
+
+# Step 6: Add log-normalized data to the 'data' slot
+log_message("Adding log-normalized data to Seurat 'data' layer")
+seurat_obj <- SetAssayData(
+    object = seurat_obj,
+    assay = opt$`assay-name`,
+    layer = "data",
+    new.data = data_matrix[rownames(seurat_obj), colnames(seurat_obj)]
+)
 
 # Step 7: Save RDS
 log_message(sprintf("Saving Seurat object to %s", opt$output))
 
-tryCatch({
-    saveRDS(seurat_obj, file = opt$output)
-    log_message("Conversion completed successfully!")
-    
-}, error = function(e) {
-    stop(sprintf("Failed to save RDS file: %s", e$message), call. = FALSE)
-})
+saveRDS(seurat_obj, file = opt$output)
+log_message("Conversion completed successfully!")
 
 # Step 8: Print summary
 cat("\n")

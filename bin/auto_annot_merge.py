@@ -40,17 +40,22 @@ def read_annotations(path):
     df = pd.read_csv(path)
     if "cell_id" not in df.columns:
         return pd.DataFrame()
+    valid_mask = df["cell_id"].notna()
+    df = df.loc[valid_mask].copy()
+    df["cell_id"] = df["cell_id"].astype(str).str.strip()
+    df = df[df["cell_id"] != ""]
     return df.set_index("cell_id")
 
 
 def merge_df(adata, csv_path):
     incoming = read_annotations(csv_path)
     if incoming.empty:
-        return []
+        return {"columns": [], "n_rows": 0, "n_common_cells": 0}
 
-    common_cells = adata.obs_names.intersection(incoming.index)
+    obs_names = pd.Index(adata.obs_names.astype(str))
+    common_cells = obs_names.intersection(incoming.index)
     if len(common_cells) == 0:
-        return []
+        return {"columns": [], "n_rows": int(incoming.shape[0]), "n_common_cells": 0}
 
     cols_added = []
     for col in incoming.columns:
@@ -65,7 +70,11 @@ def merge_df(adata, csv_path):
 
         adata.obs[col] = target
         cols_added.append(col)
-    return cols_added
+    return {
+        "columns": cols_added,
+        "n_rows": int(incoming.shape[0]),
+        "n_common_cells": int(len(common_cells)),
+    }
 
 
 def main():
@@ -79,17 +88,20 @@ def main():
         "singler": read_status(args.singler_status),
     }
 
-    columns_added = {
+    merge_report = {
         "celltypist": merge_df(adata, args.celltypist),
         "sctype": merge_df(adata, args.sctype),
         "azimuth": merge_df(adata, args.azimuth),
         "singler": merge_df(adata, args.singler),
     }
 
+    columns_added = {k: v["columns"] for k, v in merge_report.items()}
+
     adata.uns["auto_annotation_summary"] = {
         "status": {k: bool(v.get("success", False)) for k, v in status.items()},
         "status_json": json.dumps(status, ensure_ascii=True),
         "columns_added": columns_added,
+        "merge_report": merge_report,
     }
     adata.write_h5ad(args.output)
 
@@ -97,6 +109,7 @@ def main():
         "success": True,
         "status": status,
         "columns_added": columns_added,
+        "merge_report": merge_report,
     }
     with open(args.summary, "w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2)

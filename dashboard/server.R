@@ -13,8 +13,27 @@ server <- function(input, output, session) {
     qc_reports_multi = list(),
     qc_plots = list(),
     data_loaded = FALSE,
-    umap_color_choices = character(0)
+    umap_color_choices = character(0),
+    umap_color_label_map = list()
   )
+
+  sanitize_color_name <- function(x) {
+    out <- x
+    out <- gsub("^auto_annot_", "", out)
+    out <- gsub("^celltypist_", "celltypist ", out)
+    out <- gsub("^singler_", "singler ", out)
+    out <- gsub("^azimuth_", "azimuth ", out)
+    out <- gsub("^sctype", "sctype", out)
+    out <- gsub("_score$", " score", out)
+    out <- gsub("_delta_next$", " delta", out)
+    out <- gsub("_pruned$", " pruned", out)
+    out <- gsub("_l1$", " l1", out)
+    out <- gsub("_l2$", " l2", out)
+    out <- gsub("_", " ", out)
+    out <- gsub("\\bpkl\\b", "PKL", out, ignore.case = TRUE)
+    out <- trimws(out)
+    ifelse(out == "", x, out)
+  }
 
   # Initialize sample selector choices
   observeEvent(TRUE, {
@@ -144,12 +163,17 @@ server <- function(input, output, session) {
           names(rv$data_obj$metadata),
           c("cell_id")
         )
+
+        label_choices <- vapply(rv$umap_color_choices, sanitize_color_name, character(1))
+        rv$umap_color_label_map <- as.list(label_choices)
+        names(rv$umap_color_label_map) <- rv$umap_color_choices
+        display_choices <- setNames(rv$umap_color_choices, label_choices)
         
         # Update selectInput choices
         updateSelectInput(
           session,
           "umap_color_by",
-          choices = rv$umap_color_choices,
+          choices = display_choices,
           selected = if("batch" %in% rv$umap_color_choices) "batch" else rv$umap_color_choices[1]
         )
         
@@ -492,26 +516,73 @@ server <- function(input, output, session) {
       rv$data_obj$metadata[, c("cell_id", input$umap_color_by), drop = FALSE],
       by = "cell_id"
     )
+
+    if (!is.null(umap_data[[input$umap_color_by]])) {
+      if (is.logical(umap_data[[input$umap_color_by]])) {
+        umap_data[[input$umap_color_by]] <- as.character(umap_data[[input$umap_color_by]])
+      }
+      if (is.character(umap_data[[input$umap_color_by]])) {
+        umap_data[[input$umap_color_by]] <- as.factor(umap_data[[input$umap_color_by]])
+      }
+      if (all(is.na(umap_data[[input$umap_color_by]]))) {
+        validate(need(FALSE, sprintf("Column '%s' contains only NA values", input$umap_color_by)))
+      }
+
+      non_na_vals <- umap_data[[input$umap_color_by]][!is.na(umap_data[[input$umap_color_by]])]
+      if (is.numeric(non_na_vals) && length(unique(non_na_vals)) <= 1) {
+        validate(need(FALSE, sprintf("Column '%s' has no numeric range (constant value)", input$umap_color_by)))
+      }
+    }
+
+    legend_title <- input$umap_color_by
+    if (!is.null(rv$umap_color_label_map[[input$umap_color_by]])) {
+      legend_title <- rv$umap_color_label_map[[input$umap_color_by]]
+    }
     
-    # Create plot
-    p <- plot_ly(
-      data = umap_data,
-      x = ~UMAP_1,
-      y = ~UMAP_2,
-      type = 'scattergl',
-      mode = 'markers',
-      marker = list(
-        size = input$umap_point_size,
-        opacity = input$umap_opacity
-      ),
-      color = as.formula(paste0("~", input$umap_color_by)),
-      text = ~paste("Cell:", cell_id),
-      hoverinfo = 'text'
-    ) %>%
+    color_values <- umap_data[[input$umap_color_by]]
+    is_numeric_color <- is.numeric(color_values)
+
+    if (is_numeric_color) {
+      p <- plot_ly(
+        data = umap_data,
+        x = ~UMAP_1,
+        y = ~UMAP_2,
+        type = 'scattergl',
+        mode = 'markers',
+        marker = list(
+          size = input$umap_point_size,
+          opacity = input$umap_opacity,
+          color = color_values,
+          colorscale = 'Viridis',
+          showscale = TRUE,
+          colorbar = list(title = legend_title)
+        ),
+        text = ~paste("Cell:", cell_id),
+        hoverinfo = 'text'
+      )
+    } else {
+      p <- plot_ly(
+        data = umap_data,
+        x = ~UMAP_1,
+        y = ~UMAP_2,
+        type = 'scattergl',
+        mode = 'markers',
+        marker = list(
+          size = input$umap_point_size,
+          opacity = input$umap_opacity
+        ),
+        color = as.formula(paste0("~`", input$umap_color_by, "`")),
+        text = ~paste("Cell:", cell_id),
+        hoverinfo = 'text'
+      )
+    }
+
+    p <- p %>%
       layout(
-        title = sprintf("UMAP colored by %s", input$umap_color_by),
+        title = sprintf("UMAP colored by %s", legend_title),
         xaxis = list(title = "UMAP 1"),
         yaxis = list(title = "UMAP 2"),
+        legend = list(title = list(text = legend_title)),
         hovermode = 'closest'
       )
     

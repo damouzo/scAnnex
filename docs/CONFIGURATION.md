@@ -122,16 +122,15 @@ nextflow run main.nf \
 
 ### Azimuth (R, multi-reference)
 
-Use web-style reference names separated by commas:
+Use Azimuth reference codes separated by commas.
+Allowed values: `pbmcref`, `bonemarrowref`.
 
 ```bash
 nextflow run main.nf \
   --input samplesheet.csv \
   --azimuth_enable true \
-  --azimuth_refs 'Human - PBMC,Human - Bone Marrow'
+  --azimuth_refs 'pbmcref,bonemarrowref'
 ```
-
-The pipeline maps these names internally to Azimuth reference IDs.
 
 ### SingleR (R, multi-reference)
 
