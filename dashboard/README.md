@@ -137,6 +137,11 @@ Environment setup is automatic on first launch.
 - Combine clustering and auto-annotations
 - Export annotations back to H5AD
 
+### GSEA
+- Load per-contrast GSEA results from `results/gsea/`
+- Interactive pathway count control for dotplot, ridgeplot, and multi-pathway running score plot
+- Contrast-specific enrichment table for GO BP, KEGG, and Reactome
+
 ---
 
 ## File Structure
@@ -213,4 +218,3 @@ For issues or questions:
 - **HPC clusters (Apocrita):** its-research-support@qmul.ac.uk
 - **scAnnex pipeline:** Check GitHub issues
 - **Dashboard problems:** Run `./test_ssh_tunnel.sh` for diagnostics
-

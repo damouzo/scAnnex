@@ -327,6 +327,44 @@
                 }
             }
         },
+        "gsea_options": {
+            "title": "GSEA options",
+            "type": "object",
+            "description": "Parameters for gene set enrichment analysis",
+            "properties": {
+                "run_gsea": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run GSEA after DGE",
+                    "fa_icon": "fas fa-route"
+                },
+                "organism": {
+                    "type": "string",
+                    "default": "human",
+                    "enum": ["human", "mouse"],
+                    "description": "Organism used for annotation databases",
+                    "fa_icon": "fas fa-dna"
+                },
+                "gsea_top_pathways": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Default number of pathways to include in saved GSEA plots",
+                    "fa_icon": "fas fa-list-ol"
+                },
+                "gsea_pathview_top_n": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Top KEGG pathways exported with pathview",
+                    "fa_icon": "fas fa-project-diagram"
+                },
+                "gsea_dashboard_max_pathways": {
+                    "type": "integer",
+                    "default": 50,
+                    "description": "Maximum pathways allowed in dashboard dynamic plots",
+                    "fa_icon": "fas fa-sliders-h"
+                }
+            }
+        },
         "slurm_options": {
             "title": "SLURM options",
             "type": "object",
@@ -635,6 +673,9 @@
         },
         {
             "$ref": "#/definitions/dge_options"
+        },
+        {
+            "$ref": "#/definitions/gsea_options"
         },
         {
             "$ref": "#/definitions/dashboard_options"

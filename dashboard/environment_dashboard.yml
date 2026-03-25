@@ -29,6 +29,9 @@ dependencies:
   - r-data.table
   - r-jsonlite
   - r-rcolorbrewer
+  # For rendering pre-computed GSEA objects (gseaResult) from pipeline RDS files
+  - bioconductor-clusterprofiler
+  - bioconductor-enrichplot
   
   # Additional utilities
   - r-devtools

@@ -58,6 +58,9 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(dplyr)
   library(ggrepel)
+  library(clusterProfiler)
+  library(enrichplot)
+  library(ggridges)
   library(reticulate)  # Loaded AFTER setting RETICULATE_PYTHON
   library(viridis)
   library(data.table)
@@ -902,6 +905,7 @@ DEFAULT_H5AD_FILE <- ""
 DEFAULT_QC_DIR <- ""
 DEFAULT_MERGED_H5AD <- ""
 DEFAULT_DGE_DIR <- ""
+DEFAULT_GSEA_DIR <- ""
 DEFAULT_SAMPLE_IDS <- character(0)
 DEFAULT_SAMPLE_H5AD_FILES <- setNames(character(0), character(0))
 
@@ -972,6 +976,13 @@ if (dir.exists(DEFAULT_DATA_PATH)) {
   if (dir.exists(dge_candidate)) {
     DEFAULT_DGE_DIR <- dge_candidate
     message(sprintf("  Auto-detected DGE dir: %s", DEFAULT_DGE_DIR))
+  }
+
+  # GSEA directory
+  gsea_candidate <- file.path(DEFAULT_DATA_PATH, "gsea")
+  if (dir.exists(gsea_candidate)) {
+    DEFAULT_GSEA_DIR <- gsea_candidate
+    message(sprintf("  Auto-detected GSEA dir: %s", DEFAULT_GSEA_DIR))
   }
 }
 

@@ -17,6 +17,7 @@ include { AUTO_ANNOT_SUMMARIZE    } from '../modules/local/auto_annot_summarize'
 include { INTEGRATE_HARMONYPY     } from '../modules/local/integrate_harmonypy'
 include { MERGE_SAMPLES           } from '../modules/local/merge_samples'
 include { DIFFERENTIAL_EXPRESSION } from '../modules/local/differential_expression'
+include { GSEA                    } from '../modules/local/gsea'
 include { LAUNCH_DASHBOARD        } from '../modules/local/launch_dashboard'
 
 /*
@@ -210,6 +211,26 @@ workflow SCANNEX {
                 channel.fromPath(params.contrasts_file, checkIfExists: true) :
                 channel.value(file('NO_FILE'))
         )
+
+        if (params.run_gsea) {
+            def dge_contrast_tables = DIFFERENTIAL_EXPRESSION.out.tables
+                .flatten()
+                .filter { csv ->
+                    csv.name.endsWith('_results.csv') && !csv.name.startsWith('all_contrasts_')
+                }
+                .map { csv ->
+                    def contrast = csv.baseName.replaceFirst(/_results$/, '')
+                    tuple(contrast, csv)
+                }
+
+            def gsea_script_ch = channel.value(file("${projectDir}/bin/gsea_analysis.R"))
+
+            GSEA(
+                dge_contrast_tables,
+                params.organism,
+                gsea_script_ch
+            )
+        }
     }
 
     def final_output = annotated_h5ad.map { h5ad -> [[:], h5ad] }

@@ -50,6 +50,12 @@ ui <- dashboardPage(
         tabName = "tab_dge",
         icon = icon("chart-line")
       ),
+
+      menuItem(
+        "GSEA",
+        tabName = "tab_gsea",
+        icon = icon("route")
+      ),
       
       menuItem(
         "Annotation Station",
@@ -541,9 +547,149 @@ ui <- dashboardPage(
           )
         )
       ),
-      
+
       # ========================================================================
-      # TAB 6: Annotation Station
+      # TAB 6: GSEA
+      # ========================================================================
+      tabItem(
+        tabName = "tab_gsea",
+
+        h2("Gene Set Enrichment Analysis"),
+
+        fluidRow(
+          box(
+            title = "GSEA Results Location",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+
+            p("Specify the directory containing GSEA contrast folders (*_gsea):"),
+
+            fluidRow(
+              column(
+                width = 10,
+                textInput(
+                  "input_gsea_dir",
+                  "GSEA Results Directory:",
+                  value = DEFAULT_GSEA_DIR,
+                  placeholder = "e.g., results/gsea",
+                  width = "100%"
+                )
+              ),
+              column(
+                width = 2,
+                br(),
+                actionButton(
+                  "btn_load_gsea",
+                  "Load GSEA Results",
+                  icon = icon("upload"),
+                  class = "btn-primary"
+                )
+              )
+            )
+          )
+        ),
+
+        fluidRow(
+          box(
+            title = "Controls",
+            status = "info",
+            solidHeader = TRUE,
+            width = 3,
+
+            selectInput(
+              "gsea_contrast_select",
+              "Select Contrast:",
+              choices = c("No contrasts loaded"),
+              selected = NULL
+            ),
+
+            selectInput(
+              "gsea_db_select",
+              "Gene Set Database:",
+              choices = c("GO BP" = "go_bp", "KEGG" = "kegg", "Reactome" = "reactome"),
+              selected = "go_bp"
+            ),
+
+            sliderInput(
+              "gsea_n_pathways",
+              "Number of pathways:",
+              min = 1,
+              max = 50,
+              value = 10,
+              step = 1
+            ),
+
+            sliderInput(
+              "gsea_padj_cutoff",
+              "Max adj. p-value:",
+              min = 0.01,
+              max = 1.0,
+              value = 1.0,
+              step = 0.01
+            )
+          ),
+
+          box(
+            title = "GSEA Dotplot",
+            status = "success",
+            solidHeader = TRUE,
+            width = 9,
+            plotOutput("gsea_dotplot", height = "450px")
+          )
+        ),
+
+        fluidRow(
+          box(
+            title = "GSEA Ridgeplot",
+            status = "warning",
+            solidHeader = TRUE,
+            width = 6,
+            plotOutput("gsea_ridgeplot", height = "420px")
+          ),
+
+          box(
+            title = "GSEA Running Score (Multicolor)",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 6,
+            plotOutput("gsea_multiplot", height = "420px")
+          )
+        ),
+
+        conditionalPanel(
+          condition = "input.gsea_db_select === 'kegg'",
+          fluidRow(
+            box(
+              title = "Pathview Pathway Map",
+              status = "success",
+              solidHeader = TRUE,
+              width = 12,
+              selectInput(
+                "gsea_pathview_select",
+                "Select KEGG Pathway:",
+                choices = c("Loading..." = "")
+              ),
+              uiOutput("gsea_pathview")
+            )
+          )
+        ),
+
+        fluidRow(
+          box(
+            title = "Enriched Pathways Table",
+            status = "info",
+            solidHeader = TRUE,
+            width = 12,
+            collapsible = TRUE,
+            collapsed = TRUE,
+            DTOutput("gsea_table")
+          )
+        )
+      ),
+
+      # ========================================================================
+      # TAB 7: Annotation Station
       # ========================================================================
       tabItem(
         tabName = "tab_annotation",
@@ -654,9 +800,9 @@ ui <- dashboardPage(
           )
         )
       ),
-      
+
       # ========================================================================
-      # TAB 7: About
+      # TAB 8: About
       # ========================================================================
       tabItem(
         tabName = "tab_about",

@@ -1,0 +1,49 @@
+Bootstrap: docker
+From: bioconductor/bioconductor_docker:RELEASE_3_20
+
+%labels
+    Author scAnnex
+    Version 1.0
+    Description GSEA analysis container: clusterProfiler, ReactomePA, org.Hs.eg.db, org.Mm.eg.db
+
+%post
+    # Install annotation databases and remaining GSEA packages
+    # bioconductor_docker:RELEASE_3_20 includes BiocManager and many core packages;
+    # these three annotation DBs are typically absent in pruned Wave containers.
+    R -e "BiocManager::install(c( \
+        'clusterProfiler', \
+        'enrichplot', \
+        'DOSE', \
+        'ReactomePA', \
+        'pathview', \
+        'KEGGREST', \
+        'org.Hs.eg.db', \
+        'org.Mm.eg.db', \
+        'GO.db', \
+        'AnnotationDbi', \
+        'fgsea' \
+    ), ask=FALSE, update=FALSE, version=BiocManager::version())"
+
+    R -e "install.packages(c('data.table', 'ggplot2', 'dplyr', 'stringr', 'jsonlite', 'ggridges'), \
+        repos='https://cloud.r-project.org', quiet=TRUE)"
+
+%test
+    # Verify that the critical packages load without error
+    Rscript -e "
+        suppressPackageStartupMessages({
+            library(clusterProfiler)
+            library(enrichplot)
+            library(ggridges)
+            library(ReactomePA)
+            library(org.Hs.eg.db)
+            library(org.Mm.eg.db)
+            library(pathview)
+            library(ggplot2)
+            library(data.table)
+        })
+        cat('All GSEA packages loaded successfully\n')
+        cat('clusterProfiler:', as.character(packageVersion('clusterProfiler')), '\n')
+        cat('org.Hs.eg.db:', as.character(packageVersion('org.Hs.eg.db')), '\n')
+        cat('ReactomePA:', as.character(packageVersion('ReactomePA')), '\n')
+        cat('ggridges:', as.character(packageVersion('ggridges')), '\n')
+    "

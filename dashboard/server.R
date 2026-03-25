@@ -61,6 +61,9 @@ server <- function(input, output, session) {
       if (nzchar(DEFAULT_DGE_DIR)) {
         updateTextInput(session, "input_dge_dir", value = DEFAULT_DGE_DIR)
       }
+      if (nzchar(DEFAULT_GSEA_DIR)) {
+        updateTextInput(session, "input_gsea_dir", value = DEFAULT_GSEA_DIR)
+      }
     }
 
     if (identical(input$data_mode, "single")) {
@@ -1198,9 +1201,337 @@ server <- function(input, output, session) {
       write.csv(dge_df, file, row.names = FALSE)
     }
   )
-  
+
   # ===========================================================================
-  # TAB 6: ANNOTATION STATION
+  # TAB 6: GSEA
+  # ===========================================================================
+
+  rv_gsea <- reactiveValues(
+    gsea_dir = NULL,
+    contrasts = character(0),
+    data = list(),
+    max_pathways = 50,
+    loaded = FALSE
+  )
+
+  get_selected_gsea <- reactive({
+    req(rv_gsea$loaded)
+    req(input$gsea_contrast_select)
+    req(input$gsea_db_select)
+
+    contrast_data <- rv_gsea$data[[input$gsea_contrast_select]]
+    if (is.null(contrast_data)) {
+      return(NULL)
+    }
+
+    obj <- contrast_data$gsea_results[[input$gsea_db_select]]
+    if (is.null(obj)) {
+      return(NULL)
+    }
+
+    # Filter by adj. p-value cutoff from slider
+    padj_cutoff <- input$gsea_padj_cutoff
+    if (!is.null(padj_cutoff) && padj_cutoff < 1.0) {
+      obj <- tryCatch(
+        clusterProfiler::filter(obj, p.adjust <= padj_cutoff),
+        error = function(e) obj
+      )
+    }
+
+    obj
+  })
+
+  load_gsea_results <- function(gsea_dir, show_progress = TRUE) {
+    if (!dir.exists(gsea_dir)) {
+      stop(sprintf("Directory not found: %s", gsea_dir))
+    }
+
+    contrast_dirs <- list.dirs(gsea_dir, recursive = FALSE, full.names = TRUE)
+    contrast_dirs <- contrast_dirs[grepl("_gsea$", basename(contrast_dirs))]
+
+    if (length(contrast_dirs) == 0) {
+      stop("No *_gsea directories found")
+    }
+
+    gsea_data <- list()
+    contrast_names <- character(0)
+    detected_max <- 50
+
+    for (i in seq_along(contrast_dirs)) {
+      contrast_dir <- contrast_dirs[[i]]
+      contrast_name <- sub("_gsea$", "", basename(contrast_dir))
+      rds_file <- file.path(contrast_dir, "gsea_dashboard_data.rds")
+
+      if (!file.exists(rds_file)) {
+        next
+      }
+
+      obj <- readRDS(rds_file)
+      gsea_data[[contrast_name]] <- obj
+      contrast_names <- c(contrast_names, contrast_name)
+
+      if (!is.null(obj$max_pathways_dashboard)) {
+        detected_max <- max(detected_max, as.integer(obj$max_pathways_dashboard))
+      }
+
+      if (show_progress) {
+        incProgress(0.75 / max(length(contrast_dirs), 1))
+      }
+    }
+
+    if (length(contrast_names) == 0) {
+      stop("No valid gsea_dashboard_data.rds found in *_gsea directories")
+    }
+
+    rv_gsea$gsea_dir <- gsea_dir
+    rv_gsea$contrasts <- contrast_names
+    rv_gsea$data <- gsea_data
+    rv_gsea$loaded <- TRUE
+    rv_gsea$max_pathways <- detected_max
+
+    # Register gsea dir as static resource so pathview PNGs can be served
+    addResourcePath("gsea_results", gsea_dir)
+
+    updateSelectInput(
+      session,
+      "gsea_contrast_select",
+      choices = contrast_names,
+      selected = contrast_names[1]
+    )
+
+    default_top <- gsea_data[[contrast_names[1]]]$top_pathways_default
+    if (is.null(default_top) || is.na(default_top)) {
+      default_top <- 10
+    }
+
+    updateSliderInput(
+      session,
+      "gsea_n_pathways",
+      min = 1,
+      max = detected_max,
+      value = min(default_top, detected_max)
+    )
+  }
+
+  observeEvent(input$btn_load_gsea, {
+    req(input$input_gsea_dir)
+
+    withProgress(message = "Loading GSEA results...", value = 0, {
+      tryCatch({
+        load_gsea_results(input$input_gsea_dir, show_progress = TRUE)
+        showNotification(
+          sprintf("Loaded GSEA results for %d contrasts", length(rv_gsea$contrasts)),
+          type = "message",
+          duration = 3
+        )
+      }, error = function(e) {
+        rv_gsea$loaded <- FALSE
+        showNotification(
+          paste("Error loading GSEA results:", e$message),
+          type = "error",
+          duration = 8
+        )
+      })
+    })
+  })
+
+  observeEvent(rv$data_loaded, {
+    if (!isTRUE(rv$data_loaded) || !identical(input$data_mode, "integrated")) {
+      return()
+    }
+
+    gsea_dir <- input$input_gsea_dir
+    if (!rv_gsea$loaded && !is.null(gsea_dir) && nzchar(gsea_dir) && dir.exists(gsea_dir)) {
+      tryCatch({
+        load_gsea_results(gsea_dir, show_progress = FALSE)
+        showNotification(
+          sprintf("Auto-loaded GSEA results (%d contrasts)", length(rv_gsea$contrasts)),
+          type = "message",
+          duration = 3
+        )
+      }, error = function(e) {
+        showNotification(
+          paste("GSEA auto-load skipped:", e$message),
+          type = "warning",
+          duration = 5
+        )
+      })
+    }
+  }, ignoreInit = TRUE)
+
+  output$gsea_dotplot <- renderPlot({
+    if (!isTRUE(rv_gsea$loaded)) return(invisible(NULL))
+    gsea_obj <- get_selected_gsea()
+    if (is.null(gsea_obj) || nrow(as.data.frame(gsea_obj)) == 0) {
+      plot.new()
+      text(0.5, 0.5, "No enriched pathways for selection", cex = 1.2)
+      return()
+    }
+
+    n_show <- min(input$gsea_n_pathways, nrow(as.data.frame(gsea_obj)))
+    p <- enrichplot::dotplot(gsea_obj, showCategory = n_show) +
+      ggplot2::ggtitle(sprintf("%s: Dotplot (%d pathways)", input$gsea_contrast_select, n_show))
+    print(p)
+  })
+
+  output$gsea_ridgeplot <- renderPlot({
+    if (!isTRUE(rv_gsea$loaded)) return(invisible(NULL))
+    gsea_obj <- get_selected_gsea()
+    if (is.null(gsea_obj) || nrow(as.data.frame(gsea_obj)) == 0) {
+      plot.new()
+      text(0.5, 0.5, "No enriched pathways for selection", cex = 1.2)
+      return()
+    }
+
+    # Prefer pre-setReadable object: ridgeplot requires geneList IDs to match
+    # core_enrichment IDs, which setReadable breaks for GO/KEGG
+    db_key <- input$gsea_db_select
+    contrast_data <- rv_gsea$data[[input$gsea_contrast_select]]
+    orig_obj <- if (!is.null(contrast_data$gsea_results_orig)) {
+      contrast_data$gsea_results_orig[[db_key]]
+    } else {
+      NULL
+    }
+    ridge_obj <- if (!is.null(orig_obj) && nrow(as.data.frame(orig_obj)) > 0) orig_obj else gsea_obj
+
+    ridge_df <- as.data.frame(ridge_obj)
+    if (!("core_enrichment" %in% names(ridge_df))) {
+      plot.new()
+      text(0.5, 0.5, "Ridgeplot not available for this result", cex = 1.2)
+      return()
+    }
+
+    n_show <- min(input$gsea_n_pathways, nrow(ridge_df))
+    tryCatch({
+      p <- enrichplot::ridgeplot(ridge_obj, showCategory = n_show) +
+        ggplot2::ggtitle(sprintf("%s: Ridgeplot (%d pathways)", input$gsea_contrast_select, n_show))
+      print(p)
+    }, error = function(e) {
+      plot.new()
+      text(0.5, 0.5, paste("Ridgeplot error:", conditionMessage(e)), cex = 0.9)
+    })
+  })
+
+  output$gsea_multiplot <- renderPlot({
+    if (!isTRUE(rv_gsea$loaded)) return(invisible(NULL))
+    gsea_obj <- get_selected_gsea()
+    if (is.null(gsea_obj) || nrow(as.data.frame(gsea_obj)) == 0) {
+      plot.new()
+      text(0.5, 0.5, "No enriched pathways for selection", cex = 1.2)
+      return()
+    }
+
+    n_show <- min(input$gsea_n_pathways, nrow(as.data.frame(gsea_obj)))
+    idx <- seq_len(n_show)
+    p <- enrichplot::gseaplot2(
+      gsea_obj,
+      geneSetID = idx,
+      title = sprintf("%s: Running score (%d pathways)", input$gsea_contrast_select, n_show),
+      color = grDevices::hcl.colors(n_show, "Dark 3")
+    )
+    print(p)
+  })
+
+  # Update pathview pathway selector when contrast changes
+  observe({
+    req(rv_gsea$loaded)
+    req(input$gsea_contrast_select)
+
+    contrast_name <- input$gsea_contrast_select
+    pathview_dir <- file.path(rv_gsea$gsea_dir, paste0(contrast_name, "_gsea"), "pathview")
+
+    if (!dir.exists(pathview_dir)) {
+      updateSelectInput(session, "gsea_pathview_select", choices = c("No images available" = ""))
+      return()
+    }
+
+    png_files <- list.files(pathview_dir, pattern = paste0("\\.", contrast_name, "\\.png$"))
+
+    if (length(png_files) == 0) {
+      updateSelectInput(session, "gsea_pathview_select", choices = c("No images available" = ""))
+      return()
+    }
+
+    pathway_ids <- sub(paste0("\\.", contrast_name, "\\.png$"), "", png_files)
+
+    # Order by enrichment (absolute NES descending = most enriched first)
+    kegg_table <- rv_gsea$data[[contrast_name]]$tables$GSEA_KEGG
+    if (!is.null(kegg_table) && nrow(kegg_table) > 0 && "NES" %in% names(kegg_table)) {
+      kegg_sorted <- kegg_table[order(abs(kegg_table$NES), decreasing = TRUE), ]
+      ordered_ids <- kegg_sorted$ID[kegg_sorted$ID %in% pathway_ids]
+      remaining_ids <- pathway_ids[!pathway_ids %in% ordered_ids]
+      pathway_ids <- c(ordered_ids, remaining_ids)
+      png_files <- paste0(pathway_ids, ".", contrast_name, ".png")
+
+      # Build labels with description
+      desc_map <- setNames(as.character(kegg_sorted$Description), as.character(kegg_sorted$ID))
+      labels <- ifelse(
+        pathway_ids %in% names(desc_map),
+        paste0(pathway_ids, " - ", desc_map[pathway_ids]),
+        pathway_ids
+      )
+    } else {
+      labels <- pathway_ids
+    }
+
+    choices <- setNames(png_files, labels)
+    updateSelectInput(session, "gsea_pathview_select", choices = choices, selected = png_files[1])
+  })
+
+  output$gsea_pathview <- renderUI({
+    req(rv_gsea$loaded)
+    req(input$gsea_contrast_select)
+    req(input$gsea_pathview_select)
+    req(nzchar(input$gsea_pathview_select))
+
+    contrast_name <- input$gsea_contrast_select
+    src_url <- paste0("gsea_results/", contrast_name, "_gsea/pathview/", input$gsea_pathview_select)
+
+    tags$div(
+      tags$img(
+        src = src_url,
+        style = "width:100%; max-width:900px; display:block; margin:0 auto; border:1px solid #ddd; border-radius:4px;"
+      )
+    )
+  })
+
+  output$gsea_table <- renderDT({
+    gsea_obj <- get_selected_gsea()
+    if (is.null(gsea_obj) || nrow(as.data.frame(gsea_obj)) == 0) {
+      return(datatable(
+        data.frame(Message = "No enriched pathways for selected contrast/database"),
+        options = list(dom = "t", ordering = FALSE),
+        rownames = FALSE
+      ))
+    }
+
+    gsea_df <- as.data.frame(gsea_obj)
+    gsea_df <- head(gsea_df, input$gsea_n_pathways)
+    keep <- c("ID", "Description", "setSize", "enrichmentScore", "NES", "pvalue", "p.adjust", "qvalues")
+    keep <- keep[keep %in% names(gsea_df)]
+    gsea_df <- gsea_df[, keep, drop = FALSE]
+
+    # Format numeric columns: 3 decimals for scores, scientific for p-values
+    num_cols <- c("enrichmentScore", "NES", "qvalues")
+    num_cols <- num_cols[num_cols %in% names(gsea_df)]
+    for (col in num_cols) {
+      gsea_df[[col]] <- round(as.numeric(gsea_df[[col]]), 3)
+    }
+    sci_cols <- c("pvalue", "p.adjust")
+    sci_cols <- sci_cols[sci_cols %in% names(gsea_df)]
+    for (col in sci_cols) {
+      gsea_df[[col]] <- formatC(as.numeric(gsea_df[[col]]), digits = 3, format = "e")
+    }
+
+    datatable(
+      gsea_df,
+      options = list(pageLength = 10, scrollX = TRUE),
+      rownames = FALSE
+    )
+  })
+
+  # ===========================================================================
+  # TAB 7: ANNOTATION STATION
   # ===========================================================================
   
   # Reactive value to store custom annotation
