@@ -225,11 +225,6 @@ Access at `http://localhost:3838`
 nextflow run main.nf -profile conda --input samplesheet.csv
 ```
 
-**With Docker:**
-```bash
-nextflow run main.nf -profile docker --input samplesheet.csv
-```
-
 ### HPC Execution
 
 **With Singularity:**
