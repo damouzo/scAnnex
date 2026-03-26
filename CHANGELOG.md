@@ -11,6 +11,19 @@ All notable changes to scAnnex will be documented in this file.
   - GSEA container migrated to DockerHub: `docker://damouzo/scannex:gsea-1.0`
   - Singularity now auto-downloads GSEA container from DockerHub (no manual build required)
   - Moved conda package cache to scratch in Apocrita (`CONDA_PKGS_DIRS` in scratch to avoid filling `/data/home`)
+- **Dashboard environment setup optimization (HPC)**:
+  - Hybrid auto-creation with mamba (10-20x faster than conda)
+  - **Configurable location**: New param `--dashboard_conda_dir` to override default location
+  - Environment variable `SCANNEX_DASHBOARD_CONDA_DIR` for both HPC and local launchers
+  - Smart defaults: HPC scratch (`/gpfs/scratch/$USER/conda_envs/`) or home (`~/.conda/envs/`)
+  - **Age warning**: Alerts when environment is >60 days old (before 65-day auto-cleanup)
+  - 10-minute timeout for environment creation with fallback to manual instructions
+  - Automatic `module load miniforge` detection on HPC clusters
+  - Improved error handling: detects missing `timeout` command, permission issues
+  - Non-critical failures skip dashboard without stopping pipeline
+  - Reduced setup time from 30-60 minutes to 2-5 minutes
+  - Fixed permissions issue with system-wide miniforge installation
+  - Applied configurable location to both `launch_dashboard.sh` (local) and `launch_dashboard_hpc.sh` (HPC)
 - Updated all modules to use modern Wave/Seqera containers for Singularity profile
 - Replaced old biocontainers (scanpy 1.7.2, anndata 0.8.x) with Wave containers (scanpy 1.12, anndata 0.12.6)
 - UNIFY_INPUT: Now uses `pip_scanpy:46ad0720691ef95a` (scanpy 1.12)

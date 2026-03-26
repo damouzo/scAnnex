@@ -148,10 +148,24 @@ fi
 ENV_NAME="scannex-dashboard"
 ENV_FILE="${SCRIPT_DIR}/environment_dashboard.yml"
 
+# Determine conda environment location
+# Priority: SCANNEX_DASHBOARD_CONDA_DIR env var > auto-detection
+CONDA_ENV_DIR="${SCANNEX_DASHBOARD_CONDA_DIR:-}"
+
+if [[ -z "$CONDA_ENV_DIR" ]]; then
+    # Auto-detect: Use default conda location for local environments
+    CONDA_ENV_DIR="$(conda info --base)/envs"
+    print_info "Using default conda environment location: $CONDA_ENV_DIR"
+else
+    print_info "Using custom conda environment location: $CONDA_ENV_DIR"
+fi
+
+ENV_PATH="${CONDA_ENV_DIR}/${ENV_NAME}"
+
 # Check if environment exists, create if not
-if ! conda env list | grep -q "^${ENV_NAME} "; then
+if [[ ! -d "$ENV_PATH" ]]; then
     echo ""
-    print_info "Dashboard environment not detected."
+    print_info "Dashboard environment not detected at: $ENV_PATH"
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${YELLOW}  First-time setup: Creating dashboard environment${NC}"
@@ -159,13 +173,27 @@ if ! conda env list | grep -q "^${ENV_NAME} "; then
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
-    conda env create -f "$ENV_FILE" -n "$ENV_NAME" || {
+    # Create parent directory if needed
+    mkdir -p "$CONDA_ENV_DIR" || {
         echo ""
-        print_error "Failed to create environment"
+        print_error "Cannot create conda environment directory: $CONDA_ENV_DIR"
+        echo ""
+        echo "Try setting a different location:"
+        echo "  export SCANNEX_DASHBOARD_CONDA_DIR=~/conda_envs"
+        echo "  $0 $@"
+        exit 1
+    }
+    
+    conda env create -f "$ENV_FILE" -p "$ENV_PATH" || {
+        echo ""
+        print_error "Failed to create environment at: $ENV_PATH"
         echo ""
         echo "Try manually:"
-        echo "  cd ${SCRIPT_DIR}"
-        echo "  conda env create -f environment_dashboard.yml"
+        echo "  mkdir -p $CONDA_ENV_DIR"
+        echo "  conda env create -f $ENV_FILE -p $ENV_PATH"
+        echo ""
+        echo "Or use a different location:"
+        echo "  export SCANNEX_DASHBOARD_CONDA_DIR=~/conda_envs"
         exit 1
     }
     
@@ -176,7 +204,7 @@ if ! conda env list | grep -q "^${ENV_NAME} "; then
     echo ""
     sleep 1
 else
-    print_success "Using existing dashboard environment"
+    print_success "Using existing dashboard environment at: $ENV_PATH"
 fi
 
 # Find available port
@@ -263,7 +291,7 @@ echo ""
 # WSL2 fix: Source conda and activate directly instead of using 'conda run'
 # This avoids httpuv socket binding issues
 source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$ENV_NAME"
+conda activate "$ENV_PATH"
 
 # Run dashboard directly in activated environment
 # Run dashboard directly in activated environment

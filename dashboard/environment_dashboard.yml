@@ -24,14 +24,19 @@ dependencies:
   - r-dt
   - r-ggplot2
   - r-ggrepel
+  - r-ggridges
   - r-dplyr
+  - r-tidyr
   - r-viridis
   - r-data.table
   - r-jsonlite
   - r-rcolorbrewer
+  - r-cowplot
+  - r-patchwork
   # For rendering pre-computed GSEA objects (gseaResult) from pipeline RDS files
   - bioconductor-clusterprofiler
   - bioconductor-enrichplot
+  - bioconductor-dose
   
   # Additional utilities
   - r-devtools

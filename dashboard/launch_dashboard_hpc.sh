@@ -203,36 +203,143 @@ print_success "H5AD file: $(basename $H5AD_FILE)"
 echo ""
 
 ENV_NAME="scannex-dashboard"
+
+# Determine conda environment location
+# Priority: 1) SCANNEX_DASHBOARD_CONDA_DIR env var, 2) HPC scratch, 3) Home directory
+if [[ -n "${SCANNEX_DASHBOARD_CONDA_DIR:-}" ]]; then
+    CONDA_BASE_DIR="${SCANNEX_DASHBOARD_CONDA_DIR}"
+    print_info "Using custom conda directory: ${CONDA_BASE_DIR}"
+elif [[ -d "/gpfs/scratch/${USER}" ]]; then
+    # HPC with scratch (e.g., Apocrita)
+    CONDA_BASE_DIR="/gpfs/scratch/${USER}/conda_envs"
+else
+    # Local system or HPC without scratch
+    CONDA_BASE_DIR="${HOME}/.conda/envs"
+fi
+
+ENV_PATH="${CONDA_BASE_DIR}/scannex-dashboard"
 ENV_FILE="${SCRIPT_DIR}/environment_dashboard.yml"
 
-# Check if environment exists, create if not
-if ! conda env list | grep -q "^${ENV_NAME} "; then
+# Check if environment exists (by path, not name)
+if [[ -d "${ENV_PATH}" ]]; then
+    print_success "Dashboard environment ready: ${ENV_PATH}"
+    
+    # Check environment age and warn if old (scratch auto-cleanup)
+    if command -v stat &> /dev/null; then
+        # macOS uses -f %m, Linux uses -c %Y
+        ENV_AGE_SECONDS=$(( $(date +%s) - $(stat -c %Y "${ENV_PATH}" 2>/dev/null || stat -f %m "${ENV_PATH}" 2>/dev/null || echo 0) ))
+        ENV_AGE_DAYS=$(( ENV_AGE_SECONDS / 86400 ))
+        
+        if [[ ${ENV_AGE_DAYS} -gt 60 ]] && [[ "${CONDA_BASE_DIR}" == *"/gpfs/scratch/"* ]]; then
+            echo ""
+            echo -e "${YELLOW}⚠️  Warning: Environment is ${ENV_AGE_DAYS} days old${NC}"
+            echo -e "${YELLOW}   (scratch files auto-delete after 65 days)${NC}"
+            echo ""
+            echo "   If dashboard fails to start, recreate environment:"
+            echo -e "   ${GREEN}rm -rf ${ENV_PATH}${NC}"
+            echo -e "   ${GREEN}bash launch_dashboard_hpc.sh $RESULTS_DIR${NC}"
+            echo ""
+        fi
+    fi
+else
+    # Environment does not exist - attempt auto-creation
     echo ""
     print_info "Dashboard environment not detected"
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${YELLOW}  First-time setup: Creating dashboard environment${NC}"
-    echo -e "${YELLOW}  This will take approximately 5-10 minutes (one-time only)${NC}"
+    echo -e "${YELLOW}  Location: ${ENV_PATH}${NC}"
+    echo -e "${YELLOW}  This will take approximately 2-5 minutes (one-time only)${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
-    conda env create -f "$ENV_FILE" -n "$ENV_NAME" || {
+    # Create parent directory if needed
+    mkdir -p "${CONDA_BASE_DIR}" || {
+        print_error "Failed to create directory: ${CONDA_BASE_DIR}"
         echo ""
-        print_error "Failed to create environment"
+        echo "Please check permissions or set custom location:"
+        echo -e "  ${GREEN}export SCANNEX_DASHBOARD_CONDA_DIR=/path/to/writable/dir${NC}"
+        echo -e "  ${GREEN}bash launch_dashboard_hpc.sh $RESULTS_DIR${NC}"
         echo ""
-        echo "Try manually:"
-        echo "  cd ${SCRIPT_DIR}"
-        echo "  conda env create -f environment_dashboard.yml"
         exit 1
     }
+    
+    # Try to load miniforge module (HPC)
+    if command -v module &> /dev/null; then
+        module load miniforge 2>/dev/null || true
+    fi
+    
+    # Prefer mamba over conda (10-20x faster dependency resolution)
+    if command -v mamba &> /dev/null; then
+        CONDA_CMD="mamba"
+        echo -e "${GREEN}✓${NC} Using mamba for faster environment creation"
+    else
+        CONDA_CMD="conda"
+        echo -e "${YELLOW}ℹ${NC} Using conda (mamba not available, will be slower)"
+    fi
+    echo ""
+    
+    # Attempt creation with 10-minute timeout
+    # Use -p (path) instead of -n (name) to specify custom location
+    if command -v timeout &> /dev/null; then
+        timeout 600 ${CONDA_CMD} env create -f "$ENV_FILE" -p "$ENV_PATH" 2>&1 || {
+            EXIT_CODE=$?
+            echo ""
+            
+            if [ ${EXIT_CODE} -eq 124 ]; then
+                print_error "Timeout: Environment creation exceeded 10 minutes"
+            else
+                print_error "Failed to create environment automatically"
+            fi
+        }
+    else
+        # No timeout command available (old systems)
+        echo -e "${YELLOW}ℹ${NC} timeout command not available, attempting without timeout..."
+        ${CONDA_CMD} env create -f "$ENV_FILE" -p "$ENV_PATH" 2>&1 || {
+            print_error "Failed to create environment"
+        }
+    fi
+    
+    # Check if environment was actually created
+    if [[ ! -d "${ENV_PATH}" ]]; then
+        echo ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}  Manual Setup Instructions${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo "Option 1: HPC compute node (recommended for HPC)"
+        echo ""
+        echo -e "  ${GREEN}srun --cpus-per-task=4 --mem=8G --time=30:00 --pty bash${NC}"
+        echo -e "  ${GREEN}module load miniforge${NC}  # if on HPC"
+        echo -e "  ${GREEN}mkdir -p ${CONDA_BASE_DIR}${NC}"
+        echo -e "  ${GREEN}cd ${SCRIPT_DIR}${NC}"
+        echo -e "  ${GREEN}mamba env create -f environment_dashboard.yml -p ${ENV_PATH}${NC}"
+        echo -e "  ${GREEN}exit${NC}"
+        echo ""
+        echo "Option 2: Current node (if allowed)"
+        echo ""
+        echo -e "  ${GREEN}cd ${SCRIPT_DIR}${NC}"
+        echo -e "  ${GREEN}conda env create -f environment_dashboard.yml -p ${ENV_PATH}${NC}"
+        echo ""
+        echo "Option 3: Custom location"
+        echo ""
+        echo -e "  ${GREEN}export SCANNEX_DASHBOARD_CONDA_DIR=/path/to/writable/dir${NC}"
+        echo -e "  ${GREEN}bash launch_dashboard_hpc.sh $RESULTS_DIR${NC}"
+        echo ""
+        echo "Then relaunch the dashboard:"
+        echo -e "  ${GREEN}cd ${SCRIPT_DIR}${NC}"
+        echo -e "  ${GREEN}bash launch_dashboard_hpc.sh $RESULTS_DIR${NC}"
+        echo ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        exit 1
+    fi
     
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     print_success "Environment setup complete"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-else
-    print_success "Dashboard environment ready"
 fi
 
 # Display resource request
@@ -327,7 +434,7 @@ srun \
     
     # Source conda
     source \"\$(conda info --base)/etc/profile.d/conda.sh\"
-    conda activate \"$ENV_NAME\"
+    conda activate \"$ENV_PATH\"
     
     # Set environment variable for data path
     export SCANNEX_DATA_PATH=\"$RESULTS_DIR\"

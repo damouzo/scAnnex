@@ -223,12 +223,12 @@ workflow SCANNEX {
                     tuple(contrast, csv)
                 }
 
-            def gsea_script_ch = channel.value(file("${projectDir}/bin/gsea_analysis.R"))
+            def gsea_script = Channel.value(file("${projectDir}/bin/gsea_analysis.R"))
 
             GSEA(
                 dge_contrast_tables,
                 params.organism,
-                gsea_script_ch
+                gsea_script
             )
         }
     }
