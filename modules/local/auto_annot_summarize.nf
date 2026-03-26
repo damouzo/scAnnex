@@ -2,7 +2,7 @@ process AUTO_ANNOT_SUMMARIZE {
     tag "global_auto_annot_summarize"
     label 'process_medium'
 
-    conda "\"scanpy>=1.9\" \"pandas\""
+    conda "\"scanpy>=1.9\" \"scipy\" \"pandas\""
     container "oras://community.wave.seqera.io/library/scanpy_scipy:af35be00f10024f0"
 
     input:

@@ -15,8 +15,6 @@ From raw counts to insights.
 
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
 [![run with conda](https://img.shields.io/badge/run%20with-conda-44A833.svg?labelColor=000000)](https://docs.conda.io/)
-[![run with wave](https://img.shields.io/badge/run%20with-wave-1EAEDB.svg?labelColor=000000)](https://www.nextflow.io/docs/latest/wave.html)
-[![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
 [![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
 
 [Quick Start](#quick-start) •
@@ -63,7 +61,10 @@ scAnnex automates the complete workflow for single-cell RNA-seq analysis:
 ### Test with Demo Data
 
 ```bash
-# 10x MTX format
+# 10x MTX format with Singularity (recommended for HPC)
+nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results -profile singularity
+
+# Or with conda (works everywhere)
 nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results -profile conda
 ```
 
@@ -71,7 +72,7 @@ nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results -
 
 ```bash
 nextflow run main.nf \
-  -profile conda \
+  -profile singularity \
   --input samplesheet.csv \
   --outdir results \
   --max_memory '8.GB'
@@ -103,10 +104,10 @@ Choose the right execution profile for your environment:
 
 | Profile | Use Case | Command |
 |---------|----------|---------|
-| **wave** | Recommended • Builds containers on-demand | `-profile wave` |
-| **conda** | Simple • Works everywhere | `-profile conda` |
-| **docker** | Local machines | `-profile docker` |
-| **singularity** | HPC clusters | `-profile singularity` |
+| **singularity** | HPC clusters (recommended) | `-profile singularity` |
+| **conda** | Works everywhere (fallback) | `-profile conda` |
+| **apocrita** | QMUL HPC with Singularity | `-profile apocrita,singularity` |
+| **slurm** | Generic SLURM HPC | `-profile slurm,singularity` |
 
 
 > Memory allocation adapts automatically. Processes use 60-75% of `--max_memory` to prevent failures.

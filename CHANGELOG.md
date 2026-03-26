@@ -5,6 +5,12 @@ All notable changes to scAnnex will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **Container system optimization**: Cleaned up legacy profiles and improved container management
+  - Removed experimental/unsupported profiles: `wave`, `apptainer`, `podman`, `docker`
+  - Maintained production profiles: `singularity`, `conda`, `slurm`, `apocrita`
+  - GSEA container migrated to DockerHub: `docker://damouzo/scannex:gsea-1.0`
+  - Singularity now auto-downloads GSEA container from DockerHub (no manual build required)
+  - Moved conda package cache to scratch in Apocrita (`CONDA_PKGS_DIRS` in scratch to avoid filling `/data/home`)
 - Updated all modules to use modern Wave/Seqera containers for Singularity profile
 - Replaced old biocontainers (scanpy 1.7.2, anndata 0.8.x) with Wave containers (scanpy 1.12, anndata 0.12.6)
 - UNIFY_INPUT: Now uses `pip_scanpy:46ad0720691ef95a` (scanpy 1.12)
@@ -13,6 +19,16 @@ All notable changes to scAnnex will be documented in this file.
 - STANDARD_PROCESSING: Now uses `leidenalg_python-igraph_scanpy:b3d23ac8b00c1980` (scanpy 1.12 + leidenalg 0.11 + igraph 1.0)
 - NORMALIZE_INTEGRATE: Now uses `harmonypy_scanpy:a8efcfdf23c8acc8` (scanpy 1.12 + harmonypy 0.2.0)
 - AUTO_ANNOT_CELLTYPIST: Now uses `celltypist_scanpy:20c2e982b26fecc1` (scanpy 1.12 + celltypist 1.7.1)
+- AUTO_ANNOT_SUMMARIZE: Updated conda directive to include scipy for consistency with Wave container
+
+### Added
+- Script for building and pushing GSEA container to DockerHub (`scripts/build_and_push_gsea_container.sh`)
+- Script for testing GSEA container download from DockerHub (`scripts/test_gsea_container.sh`)
+- Comprehensive container documentation (`Info_containers_Status.md`) with nf-core migration guide
+
+### Removed
+- Legacy Dockerfile (`containers/Dockerfile.scanpy`) - no longer used
+- Unsupported execution profiles from `nextflow.config`
 
 ### Fixed
 - Fixed AUTO_ANNOT_CELLTYPIST anndata incompatibility (nullable-string format issue)
