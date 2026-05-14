@@ -319,13 +319,18 @@ main <- function() {
       pid <- as.character(top_kegg$ID[i])
       pname <- as.character(top_kegg$Description[i])
       cat(sprintf("Running Pathview: [%s] %s\n", pid, pname))
-      pathview::pathview(
-        gene.data = rank_entrez,
-        pathway.id = pid,
-        species = kegg_org,
-        out.suffix = args$comparison,
-        kegg.dir = file.path(args$outdir, "pathview")
-      )
+      tryCatch({
+        pathview::pathview(
+          gene.data = rank_entrez,
+          pathway.id = pid,
+          species = kegg_org,
+          out.suffix = args$comparison,
+          kegg.dir = file.path(args$outdir, "pathview")
+        )
+      }, error = function(e) {
+        warning(sprintf("Pathview rendering failed for [%s] %s — skipping. Reason: %s",
+                        pid, pname, conditionMessage(e)))
+      })
     }
 
     generated <- list.files(pattern = paste0("^", kegg_org, ".*", args$comparison, ".*\\.png$"), full.names = TRUE)

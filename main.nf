@@ -61,12 +61,30 @@ workflow {
             log.info "Results saved to: ${results_path}"
 
             if (isHPC) {
+                // Estimate memory recommendation from the h5ad file size.
+                // The dashboard loads the file fully into memory; in-memory
+                // footprint is typically ~2x the on-disk size (HDF5 with sparse
+                // count layers + dense log-norm + obsm + annotations).
+                // Round up to the next standard size (8/16/32/64/128 G).
+                def h5ad_file = new File("${results_path}/auto_annot/auto_annotated_global.h5ad")
+                def rec_mem  = "16G"   // safe default
+                def rec_cpus = 4
+                if (h5ad_file.exists()) {
+                    def size_gb   = h5ad_file.length() / 1e9
+                    def raw_need  = size_gb * 2.0               // 2x expansion factor
+                    def mem_tiers = [8, 16, 32, 64, 128]
+                    def tier      = mem_tiers.find { it >= raw_need } ?: 128
+                    rec_mem  = "${tier}G"
+                    rec_cpus = tier >= 64 ? 16 : tier >= 32 ? 8 : 4
+                }
+
                 log.info "Interactive Dashboard Available"
                 log.info ""
                 log.info "To launch the dashboard, run:"
                 log.info "     cd ${dashboard_dir}"
-                log.info "     bash launch_dashboard_hpc.sh ${results_path}"
+                log.info "     bash launch_dashboard_hpc.sh --mem ${rec_mem} --cpus ${rec_cpus} ${results_path}"
                 log.info ""
+                log.info "Memory recommendation: ${rec_mem} (estimated from output h5ad size)."
                 log.info "This will request a SLURM interactive job with dedicated"
                 log.info "compute resources and provide SSH tunnel instructions."
             } else {

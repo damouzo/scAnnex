@@ -68,10 +68,27 @@ def merge_samples(input_files: List[str], output_file: str):
         logger.info(f"    {adata.n_obs} cells x {adata.n_vars} genes")
         adatas.append(adata)
     
+    # Build per-sample keys for unique barcode prefixing.
+    # 10x barcodes are identical across samples; without a key the merged
+    # object has duplicate obs_names, which causes failures in downstream
+    # R tools (read.csv / Seurat).  Using keys + index_unique produces
+    # barcodes like  "HealthyDonor_MNC_H2_AAACCTGAGAAACCAT-1"  that are
+    # unique AND traceable back to their source sample.
+    sample_keys = []
+    for i, (file_path, adata) in enumerate(zip(input_files, adatas)):
+        if 'sample_id' in adata.obs.columns:
+            key = str(adata.obs['sample_id'].iloc[0])
+        else:
+            key = Path(file_path).stem
+        sample_keys.append(key)
+        logger.info(f"    Barcode prefix for sample {i+1}: {key}")
+
     # Concatenate all samples
     logger.info("Concatenating samples...")
     merged = ad.concat(
         adatas,
+        keys=sample_keys,
+        index_unique="_",
         axis=0,
         join='outer',
         merge='unique',
@@ -80,7 +97,7 @@ def merge_samples(input_files: List[str], output_file: str):
     )
     
     logger.info(f"Merged dataset: {merged.n_obs} cells x {merged.n_vars} genes")
-    
+
     # Save merged dataset
     logger.info(f"Saving merged dataset to: {output_file}")
     merged.write_h5ad(output_file, compression='gzip')

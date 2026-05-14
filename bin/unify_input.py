@@ -21,6 +21,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -370,6 +371,79 @@ def integrate_metadata(
     return adata
 
 
+def harmonize_gene_names(adata: ad.AnnData) -> ad.AnnData:
+    """Convert Ensembl IDs to gene symbols as var_names (single-cell best practice).
+
+    Uses CellRanger's own gene_symbols column directly:
+    - Annotated genes use the gene symbol (e.g. CD34, GAPDH).
+    - Unannotated genes keep the Ensembl ID — CellRanger already writes the
+      Ensembl ID into the gene_symbols column when no GTF symbol is available,
+      so no custom fallback is needed.
+    - True duplicate symbols (rare, e.g. pseudogenes with identical names in
+      the GTF) are resolved with anndata's make_unique, which appends '-1',
+      '-2', ... — no underscores, fully compatible with Seurat.
+
+    Supports human (ENSG...) and mouse (ENSMUSG...) Ensembl gene IDs.
+    """
+    ensembl_pattern = re.compile(r'^ENS[A-Z]*G\d+(\.\d+)?$')
+
+    # ── 1. Detect whether var_names look like Ensembl IDs ───────────────────
+    sample = adata.var_names[:min(50, adata.n_vars)]
+    ensembl_fraction = sum(bool(ensembl_pattern.match(g)) for g in sample) / max(len(sample), 1)
+    if ensembl_fraction < 0.5:
+        logger.debug(
+            f"var_names do not appear to be Ensembl IDs "
+            f"({ensembl_fraction:.0%} matched) — skipping gene name harmonization."
+        )
+        return adata
+
+    logger.info(
+        f"Detected Ensembl IDs as var_names "
+        f"({ensembl_fraction:.0%} of sampled genes). Converting to gene symbols..."
+    )
+
+    # ── 2. Locate the gene symbol column in adata.var ───────────────────────
+    symbol_col = None
+    for candidate in ('gene_symbols', 'gene_names', 'gene_name', 'feature_name', 'name'):
+        if candidate in adata.var.columns:
+            symbol_col = candidate
+            break
+
+    if symbol_col is None:
+        logger.warning(
+            f"No gene symbol column found in adata.var "
+            f"(available: {list(adata.var.columns)}). "
+            "Keeping Ensembl IDs as var_names."
+        )
+        return adata
+
+    logger.info(f"  Using adata.var['{symbol_col}'] as gene symbol source.")
+
+    # ── 3. Preserve original Ensembl IDs in var['gene_ids'] ─────────────────
+    if 'gene_ids' not in adata.var.columns:
+        adata.var['gene_ids'] = adata.var_names.astype(str)
+        logger.info("  Stored original Ensembl IDs in adata.var['gene_ids'].")
+
+    # ── 4. Set var_names to CellRanger gene symbols ──────────────────────────
+    # CellRanger already uses the Ensembl ID as the symbol value for genes
+    # without a GTF name — no custom fallback logic needed here.
+    adata.var_names = pd.Index(adata.var[symbol_col].astype(str))
+
+    # ── 5. Resolve any remaining duplicates with anndata's standard approach ─
+    # make_index_unique appends '-1', '-2', etc. — no underscores, Seurat-safe.
+    n_before = adata.n_vars
+    adata.var_names_make_unique()
+    n_disambiguated = sum(1 for v in adata.var_names if v[-2:] in ('-1', '-2', '-3', '-4', '-5'))
+
+    adata.var.index.name = 'gene_symbol'
+
+    logger.info("  Gene name harmonization complete:")
+    logger.info(f"    {n_before:>6,} total genes processed")
+    logger.info(f"    {n_disambiguated:>6,} genes with duplicate symbols resolved (-1, -2, ... suffix)")
+
+    return adata
+
+
 def standardize_anndata(
     adata: ad.AnnData,
     input_type: str,
@@ -395,7 +469,12 @@ def standardize_anndata(
         AnnData: Standardized AnnData object
     """
     logger.info("Standardizing AnnData structure...")
-    
+
+    # ── Gene name harmonization: Ensembl IDs → symbols (best practice) ──────
+    # Must run before any var.index.name handling to avoid collision checks
+    # operating on raw Ensembl IDs.
+    adata = harmonize_gene_names(adata)
+
     # Ensure gene names are in index and avoid index/column name conflicts.
     # Newer anndata versions fail on write_h5ad if index.name duplicates a
     # column name with different values.
