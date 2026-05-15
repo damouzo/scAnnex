@@ -7,37 +7,46 @@
 
 # Configure Python path BEFORE loading reticulate library
 # This ensures we use the conda environment's Python with scanpy/anndata
-conda_prefix <- Sys.getenv("CONDA_PREFIX")
 
-if (conda_prefix != "") {
-  # We're in a conda environment, use its Python
-  python_path <- file.path(conda_prefix, "bin", "python3")
-  message(sprintf("Using Conda Python from CONDA_PREFIX: %s", python_path))
+# Priority 1: RETICULATE_PYTHON already set (e.g. inside Singularity container
+# where the Dockerfile sets ENV RETICULATE_PYTHON=/opt/scannex-py/bin/python)
+reticulate_python_env <- Sys.getenv("RETICULATE_PYTHON")
+
+if (reticulate_python_env != "" && file.exists(reticulate_python_env)) {
+  python_path <- reticulate_python_env
+  message(sprintf("Using Python from RETICULATE_PYTHON: %s", python_path))
 } else {
-  # Try to find the scannex-dashboard conda environment
-  possible_paths <- c(
-    "/home/damo/miniforge3/envs/scannex-dashboard/bin/python3",
-    "~/miniforge3/envs/scannex-dashboard/bin/python3",
-    "/opt/conda/envs/scannex-dashboard/bin/python3",
-    "/usr/local/miniconda3/envs/scannex-dashboard/bin/python3"
-  )
-  
-  # Expand ~ to home directory
-  possible_paths <- sapply(possible_paths, path.expand)
-  
-  # Find first existing path
-  python_path <- NULL
-  for (path in possible_paths) {
-    if (file.exists(path)) {
-      python_path <- path
-      message(sprintf("Using Conda Python from auto-detected path: %s", python_path))
-      break
+  # Priority 2: active conda environment
+  conda_prefix <- Sys.getenv("CONDA_PREFIX")
+
+  if (conda_prefix != "") {
+    # We're in a conda environment, use its Python
+    python_path <- file.path(conda_prefix, "bin", "python3")
+    message(sprintf("Using Conda Python from CONDA_PREFIX: %s", python_path))
+  } else {
+    # Priority 3: well-known conda env paths (local/HPC)
+    possible_paths <- c(
+      "/home/damo/miniforge3/envs/scannex-dashboard/bin/python3",
+      "~/miniforge3/envs/scannex-dashboard/bin/python3",
+      "/opt/conda/envs/scannex-dashboard/bin/python3",
+      "/usr/local/miniconda3/envs/scannex-dashboard/bin/python3"
+    )
+
+    possible_paths <- sapply(possible_paths, path.expand)
+
+    python_path <- NULL
+    for (path in possible_paths) {
+      if (file.exists(path)) {
+        python_path <- path
+        message(sprintf("Using Conda Python from auto-detected path: %s", python_path))
+        break
+      }
     }
-  }
-  
-  if (is.null(python_path)) {
-    python_path <- "/usr/bin/python3"
-    warning("Could not find scannex-dashboard conda environment. Using system Python (may not work).")
+
+    if (is.null(python_path)) {
+      python_path <- "/usr/bin/python3"
+      warning("Could not find scannex-dashboard conda environment. Using system Python (may not work).")
+    }
   }
 }
 

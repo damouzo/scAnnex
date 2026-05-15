@@ -218,7 +218,7 @@ echo ""
 #   3) SINGULARITY_CACHEDIR env var (if set)
 #   4) ~/.singularity/ (local fallback)
 
-DASHBOARD_IMAGE="docker.io/damouzo/scannex-dashboard:1.0.0"
+DASHBOARD_IMAGE="docker://damouzo/scannex-dashboard:1.0.0"
 SIF_FILENAME="scannex-dashboard-1.0.0.sif"
 
 if [[ -n "${SCANNEX_DASHBOARD_SIF:-}" ]]; then
@@ -261,15 +261,16 @@ else
 
     mkdir -p "$(dirname "${SIF_PATH}")"
 
-    singularity pull "${SIF_PATH}" "${DASHBOARD_IMAGE}" || {
+    # mksquashfs (used during SIF conversion) needs ~6-8 GB RAM — more than login
+    # nodes allow. Route the pull through a short srun job on a compute node.
+    echo -e "${YELLOW}  Submitting pull job to compute node (mksquashfs needs ~8G RAM)...${NC}"
+    echo ""
+    srun --ntasks=1 --cpus-per-task=2 --mem=8G --time=30:00 --partition="${PARTITION}" \
+        singularity pull "${SIF_PATH}" "${DASHBOARD_IMAGE}" || {
         print_error "Failed to pull container from DockerHub"
         echo ""
         echo "To pull manually:"
         echo -e "  ${GREEN}singularity pull ${SIF_PATH} ${DASHBOARD_IMAGE}${NC}"
-        echo ""
-        echo "Or point to an existing SIF:"
-        echo -e "  ${GREEN}export SCANNEX_DASHBOARD_SIF=/path/to/scannex-dashboard.sif${NC}"
-        echo -e "  ${GREEN}bash launch_dashboard_hpc.sh $RESULTS_DIR${NC}"
         exit 1
     }
 
