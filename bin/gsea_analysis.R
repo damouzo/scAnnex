@@ -195,6 +195,34 @@ run_gsea_set <- function(rank_values, rank_entrez, orgdb, kegg_org, reactome_org
   }, error = function(e) NULL)
   results$go_bp <- go_bp
 
+  go_mf <- tryCatch({
+    gseGO(
+      geneList = rank_entrez,
+      OrgDb = orgdb,
+      keyType = "ENTREZID",
+      ont = "MF",
+      pAdjustMethod = "BH",
+      pvalueCutoff = 1.0,
+      eps = 1e-10,
+      verbose = FALSE
+    )
+  }, error = function(e) NULL)
+  results$go_mf <- go_mf
+
+  go_cc <- tryCatch({
+    gseGO(
+      geneList = rank_entrez,
+      OrgDb = orgdb,
+      keyType = "ENTREZID",
+      ont = "CC",
+      pAdjustMethod = "BH",
+      pvalueCutoff = 1.0,
+      eps = 1e-10,
+      verbose = FALSE
+    )
+  }, error = function(e) NULL)
+  results$go_cc <- go_cc
+
   kegg <- tryCatch({
     gseKEGG(
       geneList = rank_entrez,
@@ -269,15 +297,17 @@ main <- function() {
   )
 
   output_tables <- list(
-    GSEA_GO_BP = NULL,
-    GSEA_KEGG = NULL,
+    GSEA_GO_BP  = NULL,
+    GSEA_GO_MF  = NULL,
+    GSEA_GO_CC  = NULL,
+    GSEA_KEGG    = NULL,
     GSEA_REACTOME = NULL
   )
 
   output_plots <- list()
 
   # Keep pre-setReadable objects for dashboard ridgeplot compatibility
-  gsea_results_orig <- list(go_bp = NULL, kegg = NULL, reactome = NULL)
+  gsea_results_orig <- list(go_bp = NULL, go_mf = NULL, go_cc = NULL, kegg = NULL, reactome = NULL)
 
   if (!is.null(gsea_results$go_bp) && nrow(as.data.frame(gsea_results$go_bp)) > 0) {
     gsea_results_orig$go_bp <- gsea_results$go_bp
@@ -287,6 +317,26 @@ main <- function() {
                           orig_obj = gsea_results$go_bp)
     output_plots$go_bp <- p
     gsea_results$go_bp <- go_obj
+  }
+
+  if (!is.null(gsea_results$go_mf) && nrow(as.data.frame(gsea_results$go_mf)) > 0) {
+    gsea_results_orig$go_mf <- gsea_results$go_mf
+    go_mf_obj <- clusterProfiler::setReadable(gsea_results$go_mf, OrgDb = orgdb, keyType = "ENTREZID")
+    output_tables$GSEA_GO_MF <- as.data.frame(go_mf_obj)
+    p <- safe_enrich_plot(go_mf_obj, file.path(args$outdir, "GSEA_GO_MF"), args$top_pathways, rank_entrez,
+                          orig_obj = gsea_results$go_mf)
+    output_plots$go_mf <- p
+    gsea_results$go_mf <- go_mf_obj
+  }
+
+  if (!is.null(gsea_results$go_cc) && nrow(as.data.frame(gsea_results$go_cc)) > 0) {
+    gsea_results_orig$go_cc <- gsea_results$go_cc
+    go_cc_obj <- clusterProfiler::setReadable(gsea_results$go_cc, OrgDb = orgdb, keyType = "ENTREZID")
+    output_tables$GSEA_GO_CC <- as.data.frame(go_cc_obj)
+    p <- safe_enrich_plot(go_cc_obj, file.path(args$outdir, "GSEA_GO_CC"), args$top_pathways, rank_entrez,
+                          orig_obj = gsea_results$go_cc)
+    output_plots$go_cc <- p
+    gsea_results$go_cc <- go_cc_obj
   }
 
   if (!is.null(gsea_results$kegg) && nrow(as.data.frame(gsea_results$kegg)) > 0) {
@@ -358,6 +408,8 @@ main <- function() {
     n_ranked_genes_entrez = length(rank_entrez),
     mapping_rate = round(length(rank_entrez) / length(gene_rank_symbol), 4),
     n_go_bp = if (!is.null(output_tables$GSEA_GO_BP)) nrow(output_tables$GSEA_GO_BP) else 0,
+    n_go_mf = if (!is.null(output_tables$GSEA_GO_MF)) nrow(output_tables$GSEA_GO_MF) else 0,
+    n_go_cc = if (!is.null(output_tables$GSEA_GO_CC)) nrow(output_tables$GSEA_GO_CC) else 0,
     n_kegg = if (!is.null(output_tables$GSEA_KEGG)) nrow(output_tables$GSEA_KEGG) else 0,
     n_reactome = if (!is.null(output_tables$GSEA_REACTOME)) nrow(output_tables$GSEA_REACTOME) else 0,
     generated_at = as.character(Sys.time())

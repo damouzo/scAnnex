@@ -203,11 +203,33 @@ server <- function(input, output, session) {
       options = list(pageLength = 20, scrollX = TRUE, dom = "frtip"),
       rownames = FALSE
     ) %>%
+    formatStyle("Cells_Before",
+      background = styleColorBar(c(0, max(df$Cells_Before, na.rm = TRUE)), "#d4e6f1"),
+      backgroundSize = "100% 90%", backgroundRepeat = "no-repeat", backgroundPosition = "center"
+    ) %>%
+    formatStyle("Cells_After",
+      background = styleColorBar(c(0, max(df$Cells_After, na.rm = TRUE)), "#a9dfbf"),
+      backgroundSize = "100% 90%", backgroundRepeat = "no-repeat", backgroundPosition = "center"
+    ) %>%
     formatStyle("Retention_pct",
       background = styleColorBar(c(0, 100), "#b3d9f7"),
-      backgroundSize = "100% 90%",
-      backgroundRepeat = "no-repeat",
-      backgroundPosition = "center"
+      backgroundSize = "100% 90%", backgroundRepeat = "no-repeat", backgroundPosition = "center"
+    ) %>%
+    formatStyle("Genes_After",
+      background = styleColorBar(c(0, max(df$Genes_After, na.rm = TRUE)), "#d7bde2"),
+      backgroundSize = "100% 90%", backgroundRepeat = "no-repeat", backgroundPosition = "center"
+    ) %>%
+    formatStyle("Median_Genes",
+      background = styleColorBar(c(0, max(df$Median_Genes, na.rm = TRUE)), "#fad7a0"),
+      backgroundSize = "100% 90%", backgroundRepeat = "no-repeat", backgroundPosition = "center"
+    ) %>%
+    formatStyle("Median_Counts",
+      background = styleColorBar(c(0, max(df$Median_Counts, na.rm = TRUE)), "#a2d9ce"),
+      backgroundSize = "100% 90%", backgroundRepeat = "no-repeat", backgroundPosition = "center"
+    ) %>%
+    formatStyle("Median_MT_pct",
+      background = styleColorBar(c(0, max(df$Median_MT_pct, na.rm = TRUE)), "#f9e79f"),
+      backgroundSize = "100% 90%", backgroundRepeat = "no-repeat", backgroundPosition = "center"
     )
   })
 
@@ -230,7 +252,7 @@ server <- function(input, output, session) {
       theme_bw(base_size = 12) +
       theme(
         legend.position  = "bottom",
-        legend.text      = element_text(size = 8),
+        legend.text      = element_text(size = 11),
         legend.key.size  = unit(0.5, "lines"),
         panel.grid.minor = element_blank()
       ) +
@@ -322,6 +344,24 @@ server <- function(input, output, session) {
     pct <- sprintf("%.1f%%", as.numeric(report$filtering_statistics$cells_retained_pct))
     value_box(title = "Cell Retention", value = pct,
               showcase = icon("percent"), theme = "warning")
+  })
+
+  output$qc_box_median_genes <- renderUI({
+    report <- qc_report_active()
+    req(report)
+    ma <- report$qc_metrics_after
+    val <- if (!is.null(ma)) format_number(round(ma$n_genes_by_counts$median, 0)) else "—"
+    value_box(title = "Median Genes / Cell", value = val,
+              showcase = icon("dna"), theme = "info")
+  })
+
+  output$qc_box_median_mt <- renderUI({
+    report <- qc_report_active()
+    req(report)
+    ma <- report$qc_metrics_after
+    val <- if (!is.null(ma)) sprintf("%.2f%%", ma$pct_counts_mt$median) else "—"
+    value_box(title = "Median MT%", value = val,
+              showcase = icon("biohazard"), theme = "secondary")
   })
   
   # QC Metrics Table
@@ -545,6 +585,9 @@ server <- function(input, output, session) {
     color_values <- umap_data[[input$umap_color_by]]
     is_numeric_color <- is.numeric(color_values)
 
+    # Add hover label column (used in text aesthetic)
+    umap_data$hover_cat <- as.character(umap_data[[input$umap_color_by]])
+
     if (is_numeric_color) {
       p <- plot_ly(
         data = umap_data,
@@ -560,10 +603,12 @@ server <- function(input, output, session) {
           showscale = TRUE,
           colorbar = list(title = legend_title)
         ),
-        text = ~paste("Cell:", cell_id),
+        text = ~paste0("Cell: ", cell_id, "<br>", legend_title, ": ", round(as.numeric(hover_cat), 3)),
         hoverinfo = 'text'
       )
     } else {
+      cats <- levels(umap_data[[input$umap_color_by]])
+      pal  <- setNames(SC_COLORS[((seq_along(cats) - 1L) %% length(SC_COLORS)) + 1L], cats)
       p <- plot_ly(
         data = umap_data,
         x = ~UMAP_1,
@@ -574,8 +619,9 @@ server <- function(input, output, session) {
           size = input$umap_point_size,
           opacity = input$umap_opacity
         ),
-        color = as.formula(paste0("~`", input$umap_color_by, "`")),
-        text = ~paste("Cell:", cell_id),
+        color  = as.formula(paste0("~`", input$umap_color_by, "`")),
+        colors = pal,
+        text   = ~paste0("Cell: ", cell_id, "<br>", legend_title, ": ", hover_cat),
         hoverinfo = 'text'
       )
     }
@@ -584,10 +630,13 @@ server <- function(input, output, session) {
       layout(
         title  = sprintf("UMAP colored by %s", legend_title),
         xaxis  = list(title = "UMAP 1"),
-        yaxis  = list(title = "UMAP 2"),
-        legend = list(title = list(text = legend_title), itemsizing = "constant"),
+        yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1),
+        legend = list(title = list(text = legend_title),
+                      x = 1.02, y = 0.5, xanchor = "left", yanchor = "middle",
+                      orientation = "v", itemsizing = "constant"),
+        margin    = list(r = 160, b = 40),
         hovermode = "closest"
-      )
+      ) %>% config(responsive = TRUE)
     
     return(p)
   })
@@ -700,10 +749,12 @@ server <- function(input, output, session) {
                                  "<br>Top ", top_n, ": ", ifelse(is_top, "yes", "no")),
               hoverinfo = "text"
             ) %>% layout(
-              title = sprintf("Expression of %s (top %d cells highlighted)", gene_name, top_n),
-              xaxis = list(title = "UMAP 1"), yaxis = list(title = "UMAP 2"),
+              title  = sprintf("Expression of %s (top %d cells highlighted)", gene_name, top_n),
+              xaxis  = list(title = "UMAP 1"),
+              yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1),
+              margin = list(r = 60, b = 40),
               hovermode = "closest"
-            )
+            ) %>% config(responsive = TRUE)
           } else {
             # ---- Normal gradient mode ----
             p <- plot_ly(
@@ -769,11 +820,12 @@ server <- function(input, output, session) {
             hoverinfo = 'text'
           ) %>%
             layout(
-              title = sprintf("Gene Set Score (%d genes)", length(gene_list)),
-              xaxis = list(title = "UMAP 1"),
-              yaxis = list(title = "UMAP 2"),
+              title  = sprintf("Gene Set Score (%d genes)", length(gene_list)),
+              xaxis  = list(title = "UMAP 1"),
+              yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1),
+              margin = list(r = 80, b = 40),
               hovermode = 'closest'
-            )
+            ) %>% config(responsive = TRUE)
           
           showNotification(
             sprintf("Gene set score calculated for %d genes", length(gene_list)),
@@ -889,35 +941,24 @@ server <- function(input, output, session) {
   
   # (DGE loading is now handled by the startup auto-load observer)
 
-  # Volcano plot
-  output$dge_volcano_plot <- renderPlot({
+  # Reactive: processed DGE data for the current contrast (used by plot + hover)
+  dge_plot_data <- reactive({
     req(rv_dge$dge_loaded)
     req(input$dge_contrast_select)
-    
-    # Get selected contrast data
     dge_df <- rv_dge$dge_results[[input$dge_contrast_select]]
-    
-    if (is.null(dge_df) || nrow(dge_df) == 0) {
-      plot.new()
-      text(0.5, 0.5, "No data available for this contrast", cex = 1.5)
-      return()
-    }
-
+    if (is.null(dge_df) || nrow(dge_df) == 0) return(NULL)
     required_cols <- c("log2_fc", "pvalue_adj")
-    missing_cols <- setdiff(required_cols, names(dge_df))
-    if (length(missing_cols) > 0) {
-      plot.new()
-      text(0.5, 0.5, sprintf("Missing required DGE columns: %s", paste(missing_cols, collapse = ", ")), cex = 1.2)
-      return()
-    }
+    if (!all(required_cols %in% names(dge_df))) return(NULL)
+    dge_df %>%
+      filter(!is.na(log2_fc), !is.na(pvalue_adj), pvalue_adj > 0) %>%
+      mutate(neg_log10_padj = -log10(pvalue_adj))
+  })
 
-    dge_df <- dge_df %>%
-      filter(!is.na(log2_fc), !is.na(pvalue_adj), pvalue_adj > 0)
-
-    if (nrow(dge_df) == 0) {
-      plot.new()
-      text(0.5, 0.5, "No valid points available for volcano plot", cex = 1.2)
-      return()
+  # Volcano plot
+  output$dge_volcano_plot <- renderPlot({
+    dge_df <- dge_plot_data()
+    if (is.null(dge_df)) {
+      plot.new(); text(0.5, 0.5, "No data available for this contrast", cex = 1.5); return()
     }
     
     # Add significance column
@@ -933,7 +974,7 @@ server <- function(input, output, session) {
     )
     
     # Create volcano plot
-    p <- ggplot(dge_df, aes(x = log2_fc, y = -log10(pvalue_adj))) +
+    p <- ggplot(dge_df, aes(x = log2_fc, y = neg_log10_padj)) +
       geom_point(aes(color = direction), alpha = 0.6, size = 2) +
       scale_color_manual(
         values = c(
@@ -955,7 +996,8 @@ server <- function(input, output, session) {
       theme_minimal(base_size = 14) +
       theme(
         legend.position = "bottom",
-        plot.title = element_text(hjust = 0.5, face = "bold")
+        plot.title      = element_text(hjust = 0.5, face = "bold"),
+        aspect.ratio    = 1
       )
     
     # Add gene labels using combined LFC + significance score
@@ -987,6 +1029,59 @@ server <- function(input, output, session) {
     }
 
     print(p)
+  })
+
+  # DGE hover info panel (gene details when hovering over volcano)
+  output$dge_hover_info <- renderUI({
+    dge_df <- dge_plot_data()
+    if (is.null(dge_df)) return(tags$p(class = "text-muted", "Load DGE results first."))
+
+    hover <- input$plot_hover
+    if (is.null(hover)) {
+      return(tags$div(
+        style = "padding: 12px;",
+        icon("arrow-pointer"), tags$span(class = "text-muted ms-1", "Hover over a gene to see details.")
+      ))
+    }
+
+    pt <- nearPoints(dge_df, hover,
+                     xvar = "log2_fc", yvar = "neg_log10_padj",
+                     maxpoints = 1, threshold = 20)
+    if (nrow(pt) == 0) {
+      return(tags$p(class = "text-muted small", style = "padding: 8px;", "No gene at cursor."))
+    }
+    g <- pt[1, ]
+    direction <- if (!is.na(g$significant) && isTRUE(g$significant)) {
+      if (g$log2_fc > 0) "Upregulated" else "Downregulated"
+    } else "Not Significant"
+    dir_color <- switch(direction,
+      Upregulated   = "#d62728",
+      Downregulated = "#1f77b4",
+      "#555"
+    )
+    tags$div(
+      class = "hover-gene-info",
+      tags$div(
+        style = paste0("font-weight:700; font-size:1.05rem; color:", dir_color, "; margin-bottom:10px;"),
+        if (!is.null(g$gene)) g$gene else "Gene"
+      ),
+      tags$table(
+        class = "table table-sm table-bordered hover-gene-table",
+        tags$tbody(
+          tags$tr(tags$th("Metric"), tags$th("Value")),
+          tags$tr(tags$td("Log2 FC"),      tags$td(round(g$log2_fc, 3))),
+          tags$tr(tags$td("-log10 padj"),  tags$td(round(g$neg_log10_padj, 2))),
+          tags$tr(tags$td("p-value"),      tags$td(if (!is.null(g$pvalue))     format(g$pvalue,     scientific = TRUE, digits = 3) else "—")),
+          tags$tr(tags$td("Adj. p-value"), tags$td(format(g$pvalue_adj, scientific = TRUE, digits = 3))),
+          if (!is.null(g$mean_expr_group1) && !is.na(g$mean_expr_group1))
+            tags$tr(tags$td("Mean group 1"), tags$td(round(g$mean_expr_group1, 3))),
+          if (!is.null(g$mean_expr_group2) && !is.na(g$mean_expr_group2))
+            tags$tr(tags$td("Mean group 2"), tags$td(round(g$mean_expr_group2, 3))),
+          tags$tr(tags$td("Direction"),
+            tags$td(tags$span(style = paste0("color:", dir_color, "; font-weight:600;"), direction)))
+        )
+      )
+    )
   })
   
   # Significant genes table
@@ -1116,7 +1211,8 @@ server <- function(input, output, session) {
         theme_minimal(base_size = 14) +
         theme(
           legend.position = "bottom",
-          plot.title = element_text(hjust = 0.5, face = "bold")
+          plot.title      = element_text(hjust = 0.5, face = "bold"),
+          aspect.ratio    = 1
         )
       
       # Add gene labels using combined LFC + significance score
@@ -1146,7 +1242,7 @@ server <- function(input, output, session) {
       }
       
       # Save to file
-      ggsave(file, plot = p, width = 10, height = 8, dpi = 300)
+      ggsave(file, plot = p, width = 8, height = 8, dpi = 300)
     }
   )
   
@@ -1285,6 +1381,25 @@ server <- function(input, output, session) {
       selected = contrast_names[1]
     )
 
+    # Dynamically update database selector to only show databases present in the RDS
+    available_dbs <- intersect(
+      names(gsea_data[[contrast_names[1]]]$gsea_results),
+      c("go_bp", "go_mf", "go_cc", "kegg", "reactome")
+    )
+    db_label_map <- c(
+      go_bp    = "GO Biological Process",
+      go_mf    = "GO Molecular Function",
+      go_cc    = "GO Cellular Component",
+      kegg     = "KEGG",
+      reactome = "Reactome"
+    )
+    if (length(available_dbs) > 0) {
+      db_choices <- setNames(available_dbs, db_label_map[available_dbs])
+      updateSelectInput(session, "gsea_db_select",
+                        choices  = db_choices,
+                        selected = available_dbs[1])
+    }
+
     default_top <- gsea_data[[contrast_names[1]]]$top_pathways_default
     if (is.null(default_top) || is.na(default_top)) {
       default_top <- 10
@@ -1363,35 +1478,43 @@ server <- function(input, output, session) {
 
   output$gsea_ridgeplot <- renderPlot({
     if (!isTRUE(rv_gsea$loaded)) return(invisible(NULL))
-    gsea_obj <- get_selected_gsea()
-    if (is.null(gsea_obj) || nrow(as.data.frame(gsea_obj)) == 0) {
-      plot.new()
-      text(0.5, 0.5, "No enriched pathways for selection", cex = 1.2)
-      return()
-    }
 
-    # Prefer pre-setReadable object: ridgeplot requires geneList IDs to match
-    # core_enrichment IDs, which setReadable breaks for GO/KEGG
-    db_key <- input$gsea_db_select
     contrast_data <- rv_gsea$data[[input$gsea_contrast_select]]
-    orig_obj <- if (!is.null(contrast_data$gsea_results_orig)) {
-      contrast_data$gsea_results_orig[[db_key]]
-    } else {
-      NULL
-    }
-    ridge_obj <- if (!is.null(orig_obj) && nrow(as.data.frame(orig_obj)) > 0) orig_obj else gsea_obj
+    db_key        <- input$gsea_db_select
 
-    ridge_df <- as.data.frame(ridge_obj)
+    # Use orig (non-setReadable) object to preserve gene IDs for ridgeplot
+    orig_obj <- if (!is.null(contrast_data$gsea_results_orig))
+      contrast_data$gsea_results_orig[[db_key]] else NULL
+    if (is.null(orig_obj))
+      orig_obj <- contrast_data$gsea_results[[db_key]]
+
+    if (is.null(orig_obj)) {
+      plot.new(); text(0.5, 0.5, "No results for selected database", cex = 1.2); return()
+    }
+
+    # Apply padj filter to orig object
+    padj_cutoff   <- input$gsea_padj_cutoff
+    orig_filtered <- tryCatch(
+      clusterProfiler::filter(orig_obj, p.adjust <= padj_cutoff),
+      error = function(e) orig_obj
+    )
+
+    if (nrow(as.data.frame(orig_filtered)) == 0) {
+      plot.new(); text(0.5, 0.5, "No enriched pathways for selection", cex = 1.2); return()
+    }
+
+    ridge_df <- as.data.frame(orig_filtered)
     if (!("core_enrichment" %in% names(ridge_df))) {
-      plot.new()
-      text(0.5, 0.5, "Ridgeplot not available for this result", cex = 1.2)
-      return()
+      plot.new(); text(0.5, 0.5, "Ridgeplot not available (no core_enrichment column)", cex = 1.2); return()
     }
 
-    n_show <- min(input$gsea_n_pathways, nrow(ridge_df))
+    # Use character vector of Descriptions (not IDs) to avoid showCategory matching bug
+    n_show   <- min(input$gsea_n_pathways, nrow(ridge_df))
+    top_descs <- head(ridge_df$Description[order(ridge_df$p.adjust)], n_show)
+
     tryCatch({
-      p <- enrichplot::ridgeplot(ridge_obj, showCategory = n_show) +
-        ggplot2::ggtitle(sprintf("%s: Ridgeplot (%d pathways)", input$gsea_contrast_select, n_show))
+      p <- enrichplot::ridgeplot(orig_filtered, showCategory = top_descs) +
+        ggplot2::ggtitle(sprintf("%s: Ridgeplot (%d pathways)", input$gsea_contrast_select, length(top_descs)))
       print(p)
     }, error = function(e) {
       plot.new()
@@ -1609,16 +1732,20 @@ server <- function(input, output, session) {
         size = input$annot_point_size,
         opacity = input$annot_opacity
       ),
-      color = ~annotation,
-      text = ~paste("Cell:", cell_id, "<br>Label:", annotation),
+      color  = ~annotation,
+      colors = SC_COLORS,
+      text   = ~paste("Cell:", cell_id, "<br>Label:", annotation),
       hoverinfo = 'text'
     ) %>%
       layout(
-        title = plot_title,
-        xaxis = list(title = "UMAP 1"),
-        yaxis = list(title = "UMAP 2"),
+        title  = plot_title,
+        xaxis  = list(title = "UMAP 1"),
+        yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1),
+        legend = list(x = 1.02, y = 0.5, xanchor = "left", yanchor = "middle",
+                      orientation = "v", itemsizing = "constant"),
+        margin    = list(r = 160, b = 40),
         hovermode = 'closest'
-      )
+      ) %>% config(responsive = TRUE)
     
     return(p)
   })

@@ -886,6 +886,17 @@ success = True
 # Null-coalescing operator
 `%||%` <- function(x, y) if (is.null(x) || length(x) == 0) y else x
 
+# Single-cell distinguishable color palette (30 colors, suitable for many clusters)
+# Placeholder for buencolors corona palette — replace hex codes when provided
+SC_COLORS <- c(
+  "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00",
+  "#A65628", "#F781BF", "#999999", "#66C2A5", "#FC8D62",
+  "#8DA0CB", "#E78AC3", "#A6D854", "#FFD92F", "#E5C494",
+  "#B3B3B3", "#8DD3C7", "#FFFFB3", "#BEBADA", "#FB8072",
+  "#80B1D3", "#FDB462", "#B3DE69", "#FCCDE5", "#D9D9D9",
+  "#BC80BD", "#CCEBC5", "#FFED6F", "#1B9E77", "#D95F02"
+)
+
 #' Format large numbers with commas
 #' @param x Numeric value
 #' @return Character string with formatted number

@@ -7,7 +7,7 @@ suppressPackageStartupMessages({
     library(plotly)
 })
 
-# Helper: compact KPI card used in Overview tab
+# Helper: compact KPI card used in Overview and QC by Sample tabs
 sa_kpi <- function(icon_name, label, value_id, bg, ns = identity) {
     tags$div(
         class = "sa-kpi",
@@ -23,7 +23,8 @@ sa_kpi <- function(icon_name, label, value_id, bg, ns = identity) {
 }
 
 ui <- page_navbar(
-    title = tags$span("scAnnex", style = "font-weight: 700; letter-spacing: 0.03em;"),
+    title = tags$img(src = "Logo.png", height = "36px",
+                     style = "vertical-align: middle; margin-right: 4px;"),
     theme = bs_theme(
         bootswatch  = "flatly",
         primary     = "#1565C0",
@@ -97,52 +98,55 @@ ui <- page_navbar(
     ),
 
     # =========================================================================
-    # Tab 2: Quality Control Overview by Sample
+    # Tab 2: QC by Sample
     # =========================================================================
     nav_panel(
-        title = tags$span(
-            tags$span(class = "nav-label-long", "Quality Control Overview by Sample"),
-            tags$span(class = "nav-label-short", "QC by Sample")
-        ),
-        icon = icon("check-circle"),
+        title = "QC by Sample",
+        icon  = icon("check-circle"),
 
-        fluidRow(column(12, h4("Quality Control Overview by Sample",
+        fluidRow(column(12, h4("Quality Control by Sample",
                                style = "font-weight: 600; color: #1565C0;"))),
 
         conditionalPanel(
             condition = "output.is_integrated",
             fluidRow(
-                column(12,
-                    card(
-                        card_header("Sample Selector"),
-                        selectInput("qc_sample_select", "View QC for Sample:",
-                                    choices = c("summary"), selected = "summary",
-                                    width = "40%")
-                    )
+                column(4,
+                    selectInput("qc_sample_select", "View QC for Sample:",
+                                choices = c("summary"), selected = "summary",
+                                width = "100%")
                 )
             )
         ),
 
         fluidRow(
-            column(3, uiOutput("qc_box_cells_before")),
-            column(3, uiOutput("qc_box_cells_after")),
-            column(3, uiOutput("qc_box_genes_after")),
-            column(3, uiOutput("qc_box_retention"))
+            column(2, uiOutput("qc_box_cells_before")),
+            column(2, uiOutput("qc_box_cells_after")),
+            column(2, uiOutput("qc_box_genes_after")),
+            column(2, uiOutput("qc_box_retention")),
+            column(2, uiOutput("qc_box_median_genes")),
+            column(2, uiOutput("qc_box_median_mt"))
         ),
 
         fluidRow(
             column(12,
-                card(card_header("QC Metrics Summary"), DTOutput("qc_metrics_table"))
+                bslib::accordion(
+                    id = "qc_accordions",
+                    open = c("qc_acc_metrics"),
+                    bslib::accordion_panel(
+                        title = "QC Metrics Summary",
+                        value = "qc_acc_metrics",
+                        DTOutput("qc_metrics_table")
+                    ),
+                    bslib::accordion_panel(
+                        title = "QC Thresholds Applied",
+                        value = "qc_acc_thresh",
+                        DTOutput("qc_thresholds_table")
+                    )
+                )
             )
         ),
 
-        fluidRow(
-            column(12,
-                card(card_header("QC Thresholds Applied"), DTOutput("qc_thresholds_table"))
-            )
-        ),
-
-        h5("QC Plots", style = "font-weight: 600; margin-top: 8px;"),
+        h5("QC Plots", style = "font-weight: 600; margin-top: 16px;"),
 
         fluidRow(
             column(6,
@@ -150,7 +154,8 @@ ui <- page_navbar(
                     card_header("Before Filtering"),
                     selectInput("qc_plot_before_select", "Select Plot:",
                                 choices = c("Violin", "Scatter", "Distributions")),
-                    imageOutput("qc_plot_before", height = "520px")
+                    tags$div(class = "qc-plot-container",
+                             imageOutput("qc_plot_before", height = "auto"))
                 )
             ),
             column(6,
@@ -158,17 +163,18 @@ ui <- page_navbar(
                     card_header("After Filtering"),
                     selectInput("qc_plot_after_select", "Select Plot:",
                                 choices = c("Violin", "Scatter", "Distributions")),
-                    imageOutput("qc_plot_after", height = "520px")
+                    tags$div(class = "qc-plot-container",
+                             imageOutput("qc_plot_after", height = "auto"))
                 )
             )
         )
     ),
 
     # =========================================================================
-    # Tab 3: Clustering & UMAP
+    # Tab 3: UMAPs
     # =========================================================================
     nav_panel(
-        title = "Clustering & UMAP",
+        title = "UMAPs",
         icon  = icon("project-diagram"),
 
         fluidRow(column(12, h4("Clustering & UMAP Visualization",
@@ -181,22 +187,17 @@ ui <- page_navbar(
                     selectInput("umap_color_by", "Color by:",
                                 choices = c("batch", "sample_id", "condition"),
                                 selected = "batch"),
-                    tags$div(
-                        style = "display: flex; gap: 10px;",
-                        tags$div(style = "flex:1;",
-                                 numericInput("umap_point_size", "Point size:",
-                                              value = 3, min = 0.5, max = 20, step = 0.5)),
-                        tags$div(style = "flex:1;",
-                                 numericInput("umap_opacity", "Opacity:",
-                                              value = 0.8, min = 0.1, max = 1, step = 0.05))
-                    ),
-                    helpText("Legend marker size is fixed (8) regardless of point size.")
+                    numericInput("umap_point_size", "Point size:",
+                                 value = 3, min = 0.5, max = 20, step = 0.5),
+                    numericInput("umap_opacity", "Opacity:",
+                                 value = 0.8, min = 0.1, max = 1, step = 0.05)
                 )
             ),
             column(9,
                 card(
                     card_header("Interactive UMAP"),
-                    plotlyOutput("umap_plot", height = "600px")
+                    tags$div(class = "umap-square-wrap",
+                             plotlyOutput("umap_plot", height = "580px"))
                 )
             )
         ),
@@ -227,39 +228,34 @@ ui <- page_navbar(
                         placeholder = "Single gene: DDX41\n\nMultiple genes (one per line):\nDDX41\nDHX34\nRPS27",
                         rows = 8, width = "100%"
                     ),
-                    actionButton("btn_plot_genes", "Plot Expression",
-                                 icon = icon("chart-line"), class = "btn-primary w-100"),
-                    helpText("Single gene: expression gradient. Multiple genes: gene set score (0-1)."),
                     tags$hr(),
                     tags$div(
                         class = "top-n-section",
                         tags$strong("Highlight Top Cells", style = "font-size: 0.88rem;"),
-                        tags$p(class = "text-muted",
-                               style = "font-size: 0.78rem; margin: 3px 0 6px 0;",
-                               "Mark top N expressing cells in red; all others in gray. Set 0 for normal gradient."),
                         numericInput("gene_top_n_cells", "Top N cells to highlight:",
                                      value = 0, min = 0, max = 5000, step = 10)
-                    )
+                    ),
+                    tags$hr(),
+                    actionButton("btn_plot_genes", "Plot Expression",
+                                 icon = icon("chart-line"), class = "btn-primary w-100")
                 )
             ),
             column(9,
                 card(
                     card_header("Expression UMAP"),
-                    plotlyOutput("gene_expression_umap", height = "600px")
+                    tags$div(class = "umap-square-wrap",
+                             plotlyOutput("gene_expression_umap", height = "580px"))
                 )
             )
         )
     ),
 
     # =========================================================================
-    # Tab 5: Differential Expression
+    # Tab 5: DGE
     # =========================================================================
     nav_panel(
-        title = tags$span(
-            tags$span(class = "nav-label-long", "Differential Expression"),
-            tags$span(class = "nav-label-short", "DGE")
-        ),
-        icon = icon("chart-line"),
+        title = "DGE",
+        icon  = icon("chart-line"),
 
         fluidRow(column(12, h4("Differential Gene Expression Analysis",
                                style = "font-weight: 600; color: #1565C0;"))),
@@ -275,7 +271,7 @@ ui <- page_navbar(
                     numericInput("dge_pval_threshold", "Adj. P-value threshold:",
                                  value = 0.05, min = 1e-10, max = 1, step = 0.001),
                     numericInput("dge_logfc_threshold", "Log2 FC threshold:",
-                                 value = 0.25, min = 0, max = 10, step = 0.05),
+                                 value = 1.0, min = 0, max = 10, step = 0.1),
                     numericInput("dge_top_n_genes", "Top N genes to label:",
                                  value = 10, min = 0, max = 200, step = 1),
                     sliderInput("dge_gene_label_size", "Label font size:",
@@ -292,7 +288,20 @@ ui <- page_navbar(
             column(9,
                 navset_card_tab(
                     nav_panel("Volcano Plot",
-                              plotOutput("dge_volcano_plot", height = "600px")),
+                              fluidRow(
+                                column(8,
+                                  plotOutput("dge_volcano_plot", height = "600px",
+                                             hover = hoverOpts("plot_hover", delay = 100,
+                                                               delayType = "debounce"))
+                                ),
+                                column(4,
+                                  card(
+                                    card_header("Gene Details"),
+                                    uiOutput("dge_hover_info")
+                                  )
+                                )
+                              )
+                    ),
                     nav_panel("Significant Genes",
                               DTOutput("dge_significant_genes_table"),
                               br(),
@@ -354,11 +363,8 @@ ui <- page_navbar(
     # Tab 7: Annotation Station
     # =========================================================================
     nav_panel(
-        title = tags$span(
-            tags$span(class = "nav-label-long", "Annotation Station"),
-            tags$span(class = "nav-label-short", "Annot.")
-        ),
-        icon = icon("tags"),
+        title = "Annotation Station",
+        icon  = icon("tags"),
 
         fluidRow(column(12, h4("Annotation Station",
                                style = "font-weight: 600; color: #1565C0;"))),
@@ -381,15 +387,10 @@ ui <- page_navbar(
                     h6("Visualization Settings", style = "font-weight: 600;"),
                     selectInput("annot_umap_select", "Select UMAP:",
                                 choices = c("X_umap"), selected = "X_umap"),
-                    tags$div(
-                        style = "display: flex; gap: 10px;",
-                        tags$div(style = "flex:1;",
-                                 numericInput("annot_point_size", "Point size:",
-                                              value = 3, min = 0.5, max = 20, step = 0.5)),
-                        tags$div(style = "flex:1;",
-                                 numericInput("annot_opacity", "Opacity:",
-                                              value = 0.8, min = 0.1, max = 1, step = 0.05))
-                    ),
+                    numericInput("annot_point_size", "Point size:",
+                                 value = 3, min = 0.5, max = 20, step = 0.5),
+                    numericInput("annot_opacity", "Opacity:",
+                                 value = 0.8, min = 0.1, max = 1, step = 0.05),
                     tags$hr(),
                     actionButton("btn_plot_annotation", "Plot",
                                  icon = icon("chart-area"), class = "btn-primary w-100"),
@@ -406,7 +407,8 @@ ui <- page_navbar(
             column(9,
                 card(
                     card_header("Custom Annotation UMAP"),
-                    plotlyOutput("annotation_umap", height = "560px"),
+                    tags$div(class = "umap-square-wrap",
+                             plotlyOutput("annotation_umap", height = "580px")),
                     br(),
                     verbatimTextOutput("annotation_stats")
                 )
@@ -422,25 +424,47 @@ ui <- page_navbar(
         icon  = icon("info-circle"),
 
         fluidRow(
-            column(12,
+            column(8,
                 card(
                     card_header("About scAnnex"),
                     HTML(paste0(
-                        "<h4>scAnnex Dashboard</h4>",
-                        "<p>Interactive visualization and exploration dashboard for single-cell RNA-seq data ",
-                        "processed through the <strong>scAnnex</strong> Nextflow DSL2 pipeline.</p>",
-                        "<h5>Dashboard Features</h5>",
+                        "<div style='display:flex; align-items:center; gap:16px; margin-bottom:16px;'>",
+                        "<img src='Logo.png' height='60px'>",
+                        "<div><h4 style='margin:0;'>scAnnex v1.0.0</h4>",
+                        "<p style='margin:0; color:#666;'>Single-cell RNA-seq analysis pipeline &amp; dashboard</p></div>",
+                        "</div>",
+                        "<p>Interactive visualization and manual curation dashboard for single-cell RNA-seq data ",
+                        "processed through the <strong>scAnnex</strong> Nextflow DSL2 pipeline (Python + Scanpy).</p>",
+                        "<h5>Pipeline modules</h5>",
                         "<ul>",
-                        "<li><strong>Overview:</strong> Multi-sample QC summary, KPI cards, per-sample statistics, density plots</li>",
-                        "<li><strong>Quality Control by Sample:</strong> Per-sample QC metrics, thresholds, and before/after filtering plots</li>",
-                        "<li><strong>Clustering &amp; UMAP:</strong> Interactive UMAP; numeric point size/opacity; fixed-size legend markers</li>",
-                        "<li><strong>Gene Expression:</strong> Single gene or gene set scoring; top-N cell highlighting</li>",
-                        "<li><strong>Differential Expression:</strong> Volcano plots with balanced LFC+significance labeling</li>",
-                        "<li><strong>GSEA:</strong> Dotplot, Ridgeplot, GSEA running score, Pathview (KEGG), TreeDot tabs</li>",
-                        "<li><strong>Annotation Station:</strong> Custom cluster-to-label annotation with H5AD export</li>",
+                        "<li>Input unification (H5AD, 10x MTX, Seurat RDS)</li>",
+                        "<li>Quality control with quantile-based adaptive thresholds</li>",
+                        "<li>Doublet detection (Scrublet)</li>",
+                        "<li>Normalisation, PCA, integration (Harmony)</li>",
+                        "<li>Clustering (Leiden) &amp; UMAP embedding</li>",
+                        "<li>Automated annotation: scType, CellTypist, SingleR, Azimuth</li>",
+                        "<li>Differential expression (Wilcoxon rank-sum)</li>",
+                        "<li>Gene set enrichment (GSEA): GO BP/MF/CC, KEGG, Reactome</li>",
+                        "</ul>",
+                        "<h5>Dashboard tabs</h5>",
+                        "<ul>",
+                        "<li><strong>Overview:</strong> Multi-sample QC summary, KPI cards, density distributions</li>",
+                        "<li><strong>QC by Sample:</strong> Per-sample QC metrics, thresholds, before/after plots</li>",
+                        "<li><strong>UMAPs:</strong> Interactive UMAP with customisable colouring (categorical &amp; continuous)</li>",
+                        "<li><strong>Gene Expression:</strong> Single gene gradient or gene-set scoring; top-N cell highlighting</li>",
+                        "<li><strong>DGE:</strong> Volcano plots with balanced LFC+significance gene labelling</li>",
+                        "<li><strong>GSEA:</strong> Dotplot, Ridgeplot, Running-score, Pathview (KEGG), Results table</li>",
+                        "<li><strong>Annotation Station:</strong> Custom cluster-to-label rules with H5AD export</li>",
                         "</ul>",
                         "<hr>",
-                        "<p class='text-muted'><em>scAnnex v0.1.0 | Nextflow DSL2 + Python (Scanpy) + R Shiny + bslib</em></p>"
+                        "<p>",
+                        "<a href='https://github.com/BCI-KRP/scAnnex' target='_blank' style='margin-right:16px;'>",
+                        "<i class='fab fa-github'></i> GitHub Repository</a>",
+                        "<a href='https://nf-co.re' target='_blank'>",
+                        "Nextflow DSL2 pipeline</a>",
+                        "</p>",
+                        "<p class='text-muted' style='font-size:0.85rem;'>",
+                        "<em>scAnnex v1.0.0 &nbsp;|&nbsp; Nextflow DSL2 &nbsp;+&nbsp; Python/Scanpy &nbsp;+&nbsp; R/Shiny/bslib</em></p>"
                     ))
                 )
             )
@@ -450,6 +474,6 @@ ui <- page_navbar(
     nav_spacer(),
     nav_item(
         tags$small(class = "text-muted",
-                   paste0("scAnnex v0.1.0 | ", format(Sys.Date(), "%Y")))
+                   paste0("scAnnex v1.0.0 | ", format(Sys.Date(), "%Y")))
     )
 )

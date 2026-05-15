@@ -27,7 +27,7 @@ process DIFFERENTIAL_EXPRESSION {
     def reference = params.dge_reference ? "--reference ${params.dge_reference}" : ''
     def method = params.dge_method ? "--method ${params.dge_method}" : '--method wilcoxon'
     def min_pct = params.dge_min_pct ? "--min-pct ${params.dge_min_pct}" : '--min-pct 0.1'
-    def logfc_threshold = params.dge_logfc_threshold ? "--logfc-threshold ${params.dge_logfc_threshold}" : '--logfc-threshold 0.25'
+    def logfc_threshold = params.dge_logfc_threshold ? "--logfc-threshold ${params.dge_logfc_threshold}" : '--logfc-threshold 1.0'
     def pval_cutoff = params.dge_pval_cutoff ? "--pval-cutoff ${params.dge_pval_cutoff}" : '--pval-cutoff 0.05'
     def top_n = params.dge_top_n_genes ? "--top-n ${params.dge_top_n_genes}" : '--top-n 50'
     def save_plots = params.dge_save_plots ? '--save-plots' : ''

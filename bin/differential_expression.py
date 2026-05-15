@@ -130,8 +130,8 @@ Examples:
     parser.add_argument(
         "--logfc-threshold",
         type=float,
-        default=0.25,
-        help="Minimum log fold-change threshold (default: 0.25)"
+        default=1.0,
+        help="Minimum log fold-change threshold (default: 1.0)"
     )
     parser.add_argument(
         "--pval-cutoff",
@@ -372,7 +372,7 @@ def plot_volcano(
     contrast_id: str,
     output_dir: str,
     pval_cutoff: float = 0.05,
-    logfc_threshold: float = 0.25
+    logfc_threshold: float = 1.0
 ):
     """Generate volcano plot for a contrast."""
     if de_df.empty:
