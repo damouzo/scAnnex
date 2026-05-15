@@ -7,19 +7,26 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 # ---- System dependencies -------------------------------------------------------
 # libglpk-dev + libgmp3-dev: required by igraph (clusterProfiler dep).
-# python3-pip + python3-dev: for scanpy/anndata (h5ad reading).
-# All other system libs (libcurl, libssl, libxml2, libcairo) already present in
-# bioconductor_docker:RELEASE_3_20.
+# python3-venv + python3-dev: for isolated scanpy/anndata env (avoids PEP 668
+# "externally managed environment" block present in Ubuntu 22.04+).
+# All other system libs already present in bioconductor_docker:RELEASE_3_20.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libglpk-dev \
         libgmp3-dev \
-        python3-pip \
+        python3-venv \
         python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# ---- Python packages (for reading H5AD files from R via reticulate) ------------
-RUN pip3 install --no-cache-dir \
+# ---- Python virtual environment + packages ------------------------------------
+# Isolated venv avoids conflicts with the system Python and lets reticulate
+# find a stable, fully-controlled Python via RETICULATE_PYTHON.
+ENV VIRTUAL_ENV=/opt/scannex-py
+RUN python3 -m venv ${VIRTUAL_ENV}
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+ENV RETICULATE_PYTHON="${VIRTUAL_ENV}/bin/python"
+
+RUN pip install --no-cache-dir \
     "scanpy>=1.10.0" \
     "anndata>=0.10.0" \
     "h5py>=3.8.0" \
