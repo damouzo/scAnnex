@@ -1,0 +1,162 @@
+/* scAnnex dashboard — custom styles */
+
+/* ── Palette ─────────────────────────────────────────────────────────────── */
+:root {
+    --sa-primary:     #1565C0;
+    --sa-primary-dk:  #0D47A1;
+    --sa-teal:        #00897B;
+    --sa-cyan:        #00BCD4;
+    --sa-green:       #43A047;
+    --sa-pale:        #E3F2FD;
+    --sa-bg:          #F4F6F9;
+}
+
+/* ── Navbar ──────────────────────────────────────────────────────────────── */
+.navbar {
+    background-color: var(--sa-primary) !important;
+    border-bottom: 2px solid var(--sa-primary-dk) !important;
+}
+
+.navbar-brand,
+.navbar-brand:hover,
+.navbar .navbar-nav .nav-link {
+    color: #fff !important;
+}
+
+.navbar .navbar-nav .nav-link:hover {
+    color: var(--sa-cyan) !important;
+}
+
+.navbar .navbar-nav .nav-link.active {
+    color: #fff !important;
+    border-bottom: 3px solid var(--sa-cyan) !important;
+    padding-bottom: calc(0.5rem - 3px) !important;
+}
+
+.navbar-nav .text-muted {
+    padding: 0.5rem 1rem;
+    line-height: 2.5;
+    color: rgba(255, 255, 255, 0.65) !important;
+}
+
+/* ── Page body ───────────────────────────────────────────────────────────── */
+body {
+    background-color: var(--sa-bg);
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+.card {
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+    margin-bottom: 16px;
+}
+
+.card-header {
+    font-weight: 600;
+    font-size: 0.92rem;
+    background-color: var(--sa-pale) !important;
+    color: #1a2a3a;
+    border-bottom: 1px solid #b0cce8;
+}
+
+/* ── KPI cards ───────────────────────────────────────────────────────────── */
+.sa-kpi {
+    display: flex;
+    align-items: center;
+    border-radius: 8px;
+    padding: 12px 14px;
+    height: 100px;
+    color: white;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.sa-kpi-icon {
+    flex: 0 0 38%;
+    text-align: center;
+    font-size: 2.1rem;
+    opacity: 0.85;
+}
+
+.sa-kpi-body {
+    flex: 1 1 62%;
+    padding-left: 10px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.sa-kpi-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.88;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sa-kpi-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+/* ── Overview sample color swatches ─────────────────────────────────────── */
+.sample-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+/* ── Overview density plot section ──────────────────────────────────────── */
+.density-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 8px 0 4px 0;
+    color: #2c3e50;
+}
+
+/* ── Tab content padding ─────────────────────────────────────────────────── */
+.tab-content > .tab-pane {
+    padding-top: 16px;
+}
+
+/* ── Plotly / image containers ───────────────────────────────────────────── */
+.plot-container img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* ── Gene expression top-N section ──────────────────────────────────────── */
+.top-n-section {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 12px;
+}
+
+.top-n-section label {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* ── Annotation station ──────────────────────────────────────────────────── */
+.annotation-help {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+/* ── Responsive nav text (hide long labels on small screens) ─────────────── */
+@media (max-width: 1100px) {
+    .nav-label-long { display: none; }
+    .nav-label-short { display: inline; }
+}
+@media (min-width: 1101px) {
+    .nav-label-long { display: inline; }
+    .nav-label-short { display: none; }
+}

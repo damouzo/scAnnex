@@ -425,20 +425,28 @@ def plot_qc_metrics(
     
     for idx, metric in enumerate(all_metrics):
         ax = axes[idx]
-        sns.violinplot(data=adata.obs, y=metric, ax=ax, color='lightblue')
-        ax.set_ylabel(metric.replace('_', ' ').title())
-        ax.set_xlabel('')
+        sns.violinplot(data=adata.obs, y=metric, ax=ax, color='lightblue',
+                       inner=None, linewidth=1.5)
+        # Jitter points overlay (alpha=0.3 per spec)
+        n_cells = len(adata.obs)
+        jitter_size = 1.5 if n_cells > 5000 else 2.5
+        sns.stripplot(data=adata.obs, y=metric, ax=ax,
+                      color='steelblue', alpha=0.3, size=jitter_size, jitter=True)
+        ax.set_ylabel(metric.replace('_', ' ').title(), fontsize=13)
+        ax.set_xlabel('', fontsize=12)
+        ax.tick_params(axis='both', labelsize=11)
+        ax.set_xticklabels([])
         
         # Add threshold lines if provided
         if thresholds and metric in thresholds:
             lower, upper = thresholds[metric]
             if upper < np.inf:
-                ax.axhline(upper, color='red', linestyle='--', linewidth=1.5, 
-                          label=f'Upper: {upper:.1f}')
+                ax.axhline(upper, color='red', linestyle='--', linewidth=2,
+                           label=f'Upper: {upper:.1f}')
             if lower > 0 and not metric.startswith('pct_'):
-                ax.axhline(lower, color='red', linestyle='--', linewidth=1.5,
-                          label=f'Lower: {lower:.1f}')
-            ax.legend(fontsize=8)
+                ax.axhline(lower, color='red', linestyle='--', linewidth=2,
+                           label=f'Lower: {lower:.1f}')
+            ax.legend(fontsize=10)
     
     # Hide unused subplots if grid has extra spaces
     for idx in range(n_metrics, len(axes)):
@@ -459,12 +467,14 @@ def plot_qc_metrics(
         alpha=0.6,
         s=5
     )
-    ax.set_xlabel('Total Counts', fontsize=12)
-    ax.set_ylabel('Number of Genes', fontsize=12)
-    ax.set_title('QC Metrics Scatter Plot', fontsize=14)
-    
+    ax.set_xlabel('Total Counts', fontsize=13)
+    ax.set_ylabel('Number of Genes', fontsize=13)
+    ax.set_title('QC Metrics Scatter Plot', fontsize=15)
+    ax.tick_params(axis='both', labelsize=11)
+
     cbar = plt.colorbar(scatter, ax=ax)
-    cbar.set_label('Mitochondrial %', fontsize=10)
+    cbar.set_label('Mitochondrial %', fontsize=12)
+    cbar.ax.tick_params(labelsize=10)
     
     # Add threshold lines
     if thresholds:
@@ -503,9 +513,10 @@ def plot_qc_metrics(
         
         # Histogram
         ax.hist(values, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
-        ax.set_xlabel(metric.replace('_', ' ').title(), fontsize=11)
-        ax.set_ylabel('Frequency', fontsize=11)
-        ax.set_title(f'Distribution: {metric}', fontsize=12)
+        ax.set_xlabel(metric.replace('_', ' ').title(), fontsize=13)
+        ax.set_ylabel('Frequency', fontsize=13)
+        ax.set_title(f'Distribution: {metric}', fontsize=14)
+        ax.tick_params(axis='both', labelsize=11)
         
         # Add median line
         median = np.median(values)

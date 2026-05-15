@@ -51,8 +51,8 @@ Sys.setenv(RETICULATE_PYTHON = python_path)
 # Suppress all package startup messages for clean output
 suppressPackageStartupMessages({
   library(shiny)
-  library(shinydashboard)
-  library(shinyWidgets)
+  library(bslib)
+  library(shinycssloaders)
   library(plotly)
   library(DT)
   library(ggplot2)
@@ -65,6 +65,7 @@ suppressPackageStartupMessages({
   library(viridis)
   library(data.table)
   library(jsonlite)
+  library(RColorBrewer)
 })
 
 # ==============================================================================
@@ -873,11 +874,14 @@ success = True
 # Utility Functions
 # ==============================================================================
 
+# Null-coalescing operator
+`%||%` <- function(x, y) if (is.null(x) || length(x) == 0) y else x
+
 #' Format large numbers with commas
 #' @param x Numeric value
 #' @return Character string with formatted number
 format_number <- function(x) {
-  formatC(x, format = "d", big.mark = ",")
+  formatC(as.integer(x), format = "d", big.mark = ",")
 }
 
 #' Calculate percentage
@@ -888,16 +892,98 @@ format_percentage <- function(part, total) {
   sprintf("%.1f%%", (part / total) * 100)
 }
 
+#' Return a named palette vector (one color per sample_id)
+#' @param sample_ids Character vector of sample identifiers
+#' @return Named character vector: sample_id -> hex color
+get_sample_palette <- function(sample_ids) {
+  n <- length(sample_ids)
+  if (n == 0) return(setNames(character(0), character(0)))
+  if (n <= 8) {
+    pal <- RColorBrewer::brewer.pal(max(n, 3), "Set2")[seq_len(n)]
+  } else if (n <= 12) {
+    pal <- RColorBrewer::brewer.pal(n, "Set3")
+  } else {
+    pal <- scales::hue_pal()(n)
+  }
+  setNames(pal, sample_ids)
+}
+
+#' Load per-cell QC metrics from per-sample QC H5AD files
+#'
+#' Reads the .obs table from each {sample_id}_qc.h5ad in results/qc/ and
+#' combines them into a single data frame suitable for density plotting.
+#'
+#' @param results_dir Path to pipeline results directory
+#' @return Data frame with columns sample_id, n_genes_by_counts, total_counts,
+#'         pct_counts_mt, or NULL on failure
+load_qc_cells_data <- function(results_dir) {
+
+  qc_root <- file.path(results_dir, "qc")
+  if (!dir.exists(qc_root)) {
+    message("load_qc_cells_data: QC directory not found: ", qc_root)
+    return(NULL)
+  }
+
+  # Find all per-sample QC H5AD files
+  qc_h5ad_files <- list.files(
+    qc_root,
+    pattern = "_qc\\.h5ad$",
+    full.names = TRUE,
+    recursive = FALSE
+  )
+
+  if (length(qc_h5ad_files) == 0) {
+    message("load_qc_cells_data: no _qc.h5ad files found in ", qc_root)
+    return(NULL)
+  }
+
+  frames <- lapply(qc_h5ad_files, function(f) {
+    sample_id <- gsub("_qc\\.h5ad$", "", basename(f))
+    tryCatch({
+      py$qc_file_path <- f
+      py_run_string("
+import anndata as ad
+_adata = ad.read_h5ad(qc_file_path)
+_cols = [c for c in ['n_genes_by_counts', 'total_counts', 'pct_counts_mt'] if c in _adata.obs.columns]
+_qc_obs = {col: _adata.obs[col].tolist() for col in _cols}
+")
+      obs_r <- py$`_qc_obs`
+      if (length(obs_r) == 0) return(NULL)
+      df <- as.data.frame(obs_r, stringsAsFactors = FALSE, check.names = FALSE)
+      df$sample_id <- sample_id
+      df
+    }, error = function(e) {
+      message(sprintf("  Warning: could not load QC cells for %s: %s", sample_id, e$message))
+      NULL
+    })
+  })
+
+  frames <- Filter(Negate(is.null), frames)
+  if (length(frames) == 0) return(NULL)
+
+  result <- do.call(rbind, frames)
+  message(sprintf("load_qc_cells_data: loaded %d cells across %d samples",
+                  nrow(result), length(unique(result$sample_id))))
+  result
+}
+
 # ==============================================================================
 # Default Data Path (can be overridden via environment variable)
 # ==============================================================================
 
-# Set default data path
-data_path_env <- Sys.getenv("SCANNEX_DATA_PATH")
-DEFAULT_DATA_PATH <- if (data_path_env == "") {
-  "/srv/shiny-server/data"
+# Results directory: prefer SCANNEX_RESULTS_DIR, fall back to SCANNEX_DATA_PATH
+results_dir_env <- Sys.getenv("SCANNEX_RESULTS_DIR")
+data_path_env   <- Sys.getenv("SCANNEX_DATA_PATH")
+
+if (results_dir_env != "") {
+  RESULTS_DIR      <- results_dir_env
+  DEFAULT_DATA_PATH <- results_dir_env
+} else if (data_path_env != "") {
+  RESULTS_DIR      <- data_path_env
+  DEFAULT_DATA_PATH <- data_path_env
 } else {
-  data_path_env
+  RESULTS_DIR       <- "/srv/shiny-server/data"
+  DEFAULT_DATA_PATH <- RESULTS_DIR
 }
 
 # Auto-detect H5AD file and result directories

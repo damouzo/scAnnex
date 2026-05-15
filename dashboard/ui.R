@@ -1,879 +1,455 @@
-# scAnnex Dashboard - User Interface
-# Defines the layout and UI components
+# scAnnex Dashboard - User Interface (bslib page_navbar)
 
-ui <- dashboardPage(
-  skin = "blue",
-  
-  # ==============================================================================
-  # HEADER
-  # ==============================================================================
-  dashboardHeader(
-    title = "scAnnex Dashboard",
-    titleWidth = 300
-  ),
-  
-  # ==============================================================================
-  # SIDEBAR
-  # ==============================================================================
-  dashboardSidebar(
-    width = 300,
-    
-    sidebarMenu(
-      id = "sidebar_menu",
-      
-      menuItem(
-        "Data Input",
-        tabName = "tab_input",
-        icon = icon("upload")
-      ),
-      
-      menuItem(
-        "QC Overview",
-        tabName = "tab_qc",
-        icon = icon("check-circle")
-      ),
-      
-      menuItem(
-        "Clustering & UMAP",
-        tabName = "tab_clustering",
-        icon = icon("project-diagram")
-      ),
-      
-      menuItem(
-        "Gene Expression",
-        tabName = "tab_genes",
-        icon = icon("dna")
-      ),
-      
-      menuItem(
-        "Differential Expression",
-        tabName = "tab_dge",
-        icon = icon("chart-line")
-      ),
+suppressPackageStartupMessages({
+    library(shiny)
+    library(bslib)
+    library(DT)
+    library(plotly)
+})
 
-      menuItem(
-        "GSEA",
-        tabName = "tab_gsea",
-        icon = icon("route")
-      ),
-      
-      menuItem(
-        "Annotation Station",
-        tabName = "tab_annotation",
-        icon = icon("tags")
-      ),
-      
-      menuItem(
-        "About",
-        tabName = "tab_about",
-        icon = icon("info-circle")
-      )
-    ),
-    
-    hr(),
-    
-    # Dataset info box
-    div(
-      style = "padding: 15px;",
-      h5("Dataset Info", style = "color: white;"),
-      verbatimTextOutput("sidebar_dataset_info", placeholder = TRUE)
-    )
-  ),
-  
-  # ==============================================================================
-  # BODY
-  # ==============================================================================
-  dashboardBody(
-    
-    # Custom CSS
-    tags$head(
-      tags$style(HTML("
-        .info-box { min-height: 90px; }
-        .info-box-icon { height: 90px; line-height: 90px; }
-        .info-box-content { padding-top: 10px; padding-bottom: 10px; }
-        .box-title { font-size: 18px; font-weight: bold; }
-        .shiny-notification { position: fixed; top: 50%; right: 50%; }
-        
-        /* QC Plot images - fit within box with max height */
-        #qc_plot_before img, #qc_plot_after img {
-          max-width: 100%;
-          max-height: 500px;
-          width: auto;
-          height: auto;
-          display: block;
-          margin: 0 auto;
-        }
-      "))
-    ),
-    
-    tabItems(
-      
-      # ========================================================================
-      # TAB 1: Data Input
-      # ========================================================================
-      tabItem(
-        tabName = "tab_input",
-        
-        fluidRow(
-          box(
-            title = "Load scRNA-seq Data",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            
-            p("Select analysis mode and paths to visualize:"),
-
-            radioButtons(
-              "data_mode",
-              "Analysis Mode:",
-              choices = c(
-                "Integrated (Multi-Sample)" = "integrated",
-                "Single Sample" = "single"
-              ),
-              selected = ifelse(DEFAULT_MERGED_H5AD != "", "integrated", "single"),
-              inline = TRUE
-            ),
-
-            conditionalPanel(
-              condition = "input.data_mode == 'single'",
-              selectInput(
-                "sample_select",
-                "Select Sample:",
-                choices = if (length(DEFAULT_SAMPLE_IDS) > 0) DEFAULT_SAMPLE_IDS else c("No samples detected"),
-                selected = if (length(DEFAULT_SAMPLE_IDS) > 0) DEFAULT_SAMPLE_IDS[1] else "No samples detected",
-                width = "100%"
-              )
-            ),
-            
-            fluidRow(
-              column(
-                width = 6,
-                textInput(
-                  "input_h5ad_path",
-                  "H5AD File Path:",
-                  value = DEFAULT_H5AD_FILE,
-                  width = "100%"
-                )
-              ),
-              column(
-                width = 6,
-                textInput(
-                  "input_qc_dir",
-                  "QC Results Directory:",
-                  value = DEFAULT_QC_DIR,
-                  width = "100%"
-                )
-              )
-            ),
-            
-            checkboxInput(
-              "input_backed_mode",
-              "Use backed mode (recommended for >50k cells)",
-              value = FALSE
-            ),
-            
-            actionButton(
-              "btn_load_data",
-              "Load Data",
-              icon = icon("play"),
-              class = "btn-primary btn-lg"
-            ),
-            
-            hr(),
-            
-            verbatimTextOutput("data_load_status")
-          )
+# Helper: compact KPI card used in Overview tab
+sa_kpi <- function(icon_name, label, value_id, bg, ns = identity) {
+    tags$div(
+        class = "sa-kpi",
+        style = paste0("background-color:", bg, ";"),
+        tags$div(class = "sa-kpi-icon", icon(icon_name)),
+        tags$div(
+            class = "sa-kpi-body",
+            tags$div(class = "sa-kpi-label", label),
+            tags$div(class = "sa-kpi-value",
+                     textOutput(ns(value_id), inline = TRUE))
         )
-      ),
-      
-      # ========================================================================
-      # TAB 2: QC Overview
-      # ========================================================================
-      tabItem(
-        tabName = "tab_qc",
-        
-        h2("Quality Control Overview"),
+    )
+}
+
+ui <- page_navbar(
+    title = tags$span("scAnnex", style = "font-weight: 700; letter-spacing: 0.03em;"),
+    theme = bs_theme(
+        bootswatch  = "flatly",
+        primary     = "#1565C0",
+        secondary   = "#00897B",
+        info        = "#0288D1",
+        base_font   = font_google("Inter"),
+        code_font   = font_google("Source Code Pro")
+    ),
+    header = tags$head(
+        tags$link(rel = "stylesheet", type = "text/css", href = "scannex.css")
+    ),
+    window_title = "scAnnex Dashboard",
+    id = "main_navbar",
+
+    # =========================================================================
+    # Tab 1: Overview
+    # =========================================================================
+    nav_panel(
+        title = "Overview",
+        icon  = icon("home"),
+
+        fluidRow(
+            column(12,
+                tags$div(
+                    style = "margin-bottom: 8px;",
+                    h4("scRNA-seq Analysis Overview",
+                       style = "margin: 0; font-weight: 600; color: #1565C0;"),
+                    tags$small(class = "text-muted",
+                               textOutput("overview_results_dir_label", inline = TRUE))
+                )
+            )
+        ),
+
+        fluidRow(
+            column(2, sa_kpi("layer-group",  "Samples",           "ov_n_samples",     "#1565C0")),
+            column(2, sa_kpi("circle",       "Cells (before QC)", "ov_cells_before",  "#1976D2")),
+            column(2, sa_kpi("check-circle", "Cells (after QC)",  "ov_cells_after",   "#00897B")),
+            column(2, sa_kpi("percent",      "Avg Retention",     "ov_avg_retention", "#0288D1")),
+            column(2, sa_kpi("dna",          "Avg Genes / Cell",  "ov_avg_genes",     "#5C6BC0")),
+            column(2, sa_kpi("biohazard",    "Avg Median MT%",    "ov_avg_mt",        "#7B1FA2"))
+        ),
+
+        fluidRow(
+            column(12,
+                card(
+                    card_header("Per-Sample QC Summary"),
+                    DTOutput("overview_sample_table")
+                )
+            )
+        ),
+
+        fluidRow(
+            column(12,
+                card(
+                    card_header(
+                        tags$span(
+                            "QC Metric Distributions by Sample",
+                            tags$small(class = "text-muted ms-2",
+                                       "(after QC filtering, one line per sample)")
+                        )
+                    ),
+                    uiOutput("overview_density_status"),
+                    fluidRow(
+                        column(4, plotOutput("overview_density_mt",     height = "260px")),
+                        column(4, plotOutput("overview_density_genes",  height = "260px")),
+                        column(4, plotOutput("overview_density_counts", height = "260px"))
+                    )
+                )
+            )
+        )
+    ),
+
+    # =========================================================================
+    # Tab 2: Quality Control Overview by Sample
+    # =========================================================================
+    nav_panel(
+        title = tags$span(
+            tags$span(class = "nav-label-long", "Quality Control Overview by Sample"),
+            tags$span(class = "nav-label-short", "QC by Sample")
+        ),
+        icon = icon("check-circle"),
+
+        fluidRow(column(12, h4("Quality Control Overview by Sample",
+                               style = "font-weight: 600; color: #1565C0;"))),
 
         conditionalPanel(
-          condition = "input.data_mode == 'integrated'",
-          fluidRow(
-            box(
-              title = "Sample QC Selector",
-              status = "primary",
-              solidHeader = TRUE,
-              width = 12,
-              selectInput(
-                "qc_sample_select",
-                "View QC for Sample:",
-                choices = c("summary"),
-                selected = "summary"
-              )
-            )
-          )
-        ),
-        
-        # Summary boxes
-        fluidRow(
-          infoBoxOutput("qc_box_cells_before", width = 3),
-          infoBoxOutput("qc_box_cells_after", width = 3),
-          infoBoxOutput("qc_box_genes_after", width = 3),
-          infoBoxOutput("qc_box_retention", width = 3)
-        ),
-        
-        fluidRow(
-          box(
-            title = "QC Metrics Summary",
-            status = "info",
-            solidHeader = TRUE,
-            width = 12,
-            collapsible = TRUE,
-            
-            DTOutput("qc_metrics_table")
-          )
-        ),
-        
-        fluidRow(
-          box(
-            title = "QC Thresholds Applied",
-            status = "warning",
-            solidHeader = TRUE,
-            width = 12,
-            collapsible = TRUE,
-            collapsed = TRUE,
-            
-            DTOutput("qc_thresholds_table")
-          )
-        ),
-        
-        h3("QC Plots"),
-        
-        fluidRow(
-          box(
-            title = "Before Filtering",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 6,
-            
-            selectInput(
-              "qc_plot_before_select",
-              "Select Plot:",
-              choices = c("Violin", "Scatter", "Distributions")
-            ),
-            
-            imageOutput("qc_plot_before")
-          ),
-          
-          box(
-            title = "After Filtering",
-            status = "success",
-            solidHeader = TRUE,
-            width = 6,
-            
-            selectInput(
-              "qc_plot_after_select",
-              "Select Plot:",
-              choices = c("Violin", "Scatter", "Distributions")
-            ),
-            
-            imageOutput("qc_plot_after")
-          )
-        )
-      ),
-      
-      # ========================================================================
-      # TAB 3: Clustering & UMAP
-      # ========================================================================
-      tabItem(
-        tabName = "tab_clustering",
-        
-        h2("Clustering & UMAP Visualization"),
-        
-        fluidRow(
-          box(
-            title = "UMAP Controls",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 3,
-            
-            selectInput(
-              "umap_color_by",
-              "Color by:",
-              choices = c("batch", "sample_id", "condition"),
-              selected = "batch"
-            ),
-            
-            sliderInput(
-              "umap_point_size",
-              "Point size:",
-              min = 1,
-              max = 10,
-              value = 5,
-              step = 0.5
-            ),
-            
-            sliderInput(
-              "umap_opacity",
-              "Opacity:",
-              min = 0.1,
-              max = 1,
-              value = 1,
-              step = 0.1
-            )
-          ),
-          
-          box(
-            title = "Interactive UMAP",
-            status = "info",
-            solidHeader = TRUE,
-            width = 9,
-            
-            plotlyOutput("umap_plot", height = "600px")
-          )
-        ),
-        
-        fluidRow(
-          box(
-            title = "Cell Metadata Table",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            collapsible = TRUE,
-            collapsed = TRUE,
-            
-            DTOutput("metadata_table")
-          )
-        )
-      ),
-      
-      # ========================================================================
-      # TAB 4: Gene Expression
-      # ========================================================================
-      tabItem(
-        tabName = "tab_genes",
-        
-        h2("Gene Expression Visualization"),
-        
-        fluidRow(
-          box(
-            title = "Gene Expression",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 3,
-            
-            textAreaInput(
-              "gene_input",
-              "Gene Name(s):",
-              placeholder = "Single gene: CD3D\n\nMultiple genes (one per line):\nCD3D\nCD3E\nCD8A\nCD8B",
-              rows = 8,
-              width = "100%"
-            ),
-            
-            actionButton(
-              "btn_plot_genes",
-              "Plot Expression",
-              icon = icon("chart-line"),
-              class = "btn-primary btn-block"
-            ),
-            
-            br(),
-            
-            helpText(
-              "Enter a single gene name for expression, or multiple genes (one per line) for gene set scoring."
-            )
-          ),
-          
-          box(
-            title = "Gene Expression UMAP",
-            status = "info",
-            solidHeader = TRUE,
-            width = 9,
-            
-            plotlyOutput("gene_expression_umap", height = "600px")
-          )
-        )
-      ),
-      
-      # ========================================================================
-      # TAB 5: Differential Expression
-      # ========================================================================
-      tabItem(
-        tabName = "tab_dge",
-        
-        h2("Differential Gene Expression Analysis"),
-        
-        fluidRow(
-          box(
-            title = "DGE Results Location",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            
-            p("Specify the directory containing DGE results (dge_results/ folder):"),
-            
+            condition = "output.is_integrated",
             fluidRow(
-              column(
-                width = 10,
-                textInput(
-                  "input_dge_dir",
-                  "DGE Results Directory:",
-                  value = DEFAULT_DGE_DIR,
-                  placeholder = "e.g., results_dge_SUCCESS/dge/dge_results",
-                  width = "100%"
+                column(12,
+                    card(
+                        card_header("Sample Selector"),
+                        selectInput("qc_sample_select", "View QC for Sample:",
+                                    choices = c("summary"), selected = "summary",
+                                    width = "40%")
+                    )
                 )
-              ),
-              column(
-                width = 2,
-                br(),
-                actionButton(
-                  "btn_load_dge",
-                  "Load DGE Results",
-                  icon = icon("upload"),
-                  class = "btn-primary"
-                )
-              )
             )
-          )
         ),
-        
+
         fluidRow(
-          box(
-            title = "Contrast Selection",
-            status = "info",
-            solidHeader = TRUE,
-            width = 3,
-            
-            selectInput(
-              "dge_contrast_select",
-              "Select Contrast:",
-              choices = c("No contrasts loaded"),
-              selected = NULL
-            ),
-            
-            hr(),
-            
-            h5("Filtering Options"),
-
-            numericInput(
-              "dge_pval_threshold",
-              "Adj. P-value threshold:",
-              value = 0.05,
-              min = 1e-10,
-              max = 1,
-              step = 0.001
-            ),
-
-            numericInput(
-              "dge_logfc_threshold",
-              "Log2 FC threshold:",
-              value = 0.25,
-              min = 0,
-              max = 10,
-              step = 0.05
-            ),
-            
-            checkboxInput(
-              "dge_show_gene_names",
-              "Show gene names on volcano plot",
-              value = TRUE
-            ),
-
-            numericInput(
-              "dge_top_n_genes",
-              "Number of top genes to label:",
-              value = 10,
-              min = 0,
-              max = 1000,
-              step = 1
-            ),
-
-            sliderInput(
-              "dge_gene_label_size",
-              "Gene name size on plot:",
-              min = 2,
-              max = 8,
-              value = 3,
-              step = 0.5
-            )
-          ),
-          
-          box(
-            title = "Volcano Plot",
-            status = "success",
-            solidHeader = TRUE,
-            width = 9,
-            
-            plotOutput("dge_volcano_plot", height = "600px"),
-            
-            br(),
-            
-            downloadButton(
-              "btn_download_volcano",
-              "Download Volcano Plot (PNG)",
-              class = "btn-sm"
-            )
-          )
+            column(3, uiOutput("qc_box_cells_before")),
+            column(3, uiOutput("qc_box_cells_after")),
+            column(3, uiOutput("qc_box_genes_after")),
+            column(3, uiOutput("qc_box_retention"))
         ),
-        
+
         fluidRow(
-          box(
-            title = "Significant Genes",
-            status = "warning",
-            solidHeader = TRUE,
-            width = 12,
-            collapsible = TRUE,
-            
-            DTOutput("dge_significant_genes_table"),
-            
-            br(),
-            
-            fluidRow(
-              column(
-                width = 3,
-                downloadButton(
-                  "btn_download_sig_genes",
-                  "Download Significant Genes (CSV)",
-                  class = "btn-sm"
-                )
-              ),
-              column(
-                width = 3,
-                downloadButton(
-                  "btn_download_all_results",
-                  "Download All Results (CSV)",
-                  class = "btn-sm"
-                )
-              )
+            column(12,
+                card(card_header("QC Metrics Summary"), DTOutput("qc_metrics_table"))
             )
-          )
+        ),
+
+        fluidRow(
+            column(12,
+                card(card_header("QC Thresholds Applied"), DTOutput("qc_thresholds_table"))
+            )
+        ),
+
+        h5("QC Plots", style = "font-weight: 600; margin-top: 8px;"),
+
+        fluidRow(
+            column(6,
+                card(
+                    card_header("Before Filtering"),
+                    selectInput("qc_plot_before_select", "Select Plot:",
+                                choices = c("Violin", "Scatter", "Distributions")),
+                    imageOutput("qc_plot_before", height = "520px")
+                )
+            ),
+            column(6,
+                card(
+                    card_header("After Filtering"),
+                    selectInput("qc_plot_after_select", "Select Plot:",
+                                choices = c("Violin", "Scatter", "Distributions")),
+                    imageOutput("qc_plot_after", height = "520px")
+                )
+            )
         )
-      ),
+    ),
 
-      # ========================================================================
-      # TAB 6: GSEA
-      # ========================================================================
-      tabItem(
-        tabName = "tab_gsea",
+    # =========================================================================
+    # Tab 3: Clustering & UMAP
+    # =========================================================================
+    nav_panel(
+        title = "Clustering & UMAP",
+        icon  = icon("project-diagram"),
 
-        h2("Gene Set Enrichment Analysis"),
+        fluidRow(column(12, h4("Clustering & UMAP Visualization",
+                               style = "font-weight: 600; color: #1565C0;"))),
 
         fluidRow(
-          box(
-            title = "GSEA Results Location",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-
-            p("Specify the directory containing GSEA contrast folders (*_gsea):"),
-
-            fluidRow(
-              column(
-                width = 10,
-                textInput(
-                  "input_gsea_dir",
-                  "GSEA Results Directory:",
-                  value = DEFAULT_GSEA_DIR,
-                  placeholder = "e.g., results/gsea",
-                  width = "100%"
+            column(3,
+                card(
+                    card_header("UMAP Controls"),
+                    selectInput("umap_color_by", "Color by:",
+                                choices = c("batch", "sample_id", "condition"),
+                                selected = "batch"),
+                    tags$div(
+                        style = "display: flex; gap: 10px;",
+                        tags$div(style = "flex:1;",
+                                 numericInput("umap_point_size", "Point size:",
+                                              value = 3, min = 0.5, max = 20, step = 0.5)),
+                        tags$div(style = "flex:1;",
+                                 numericInput("umap_opacity", "Opacity:",
+                                              value = 0.8, min = 0.1, max = 1, step = 0.05))
+                    ),
+                    helpText("Legend marker size is fixed (8) regardless of point size.")
                 )
-              ),
-              column(
-                width = 2,
-                br(),
-                actionButton(
-                  "btn_load_gsea",
-                  "Load GSEA Results",
-                  icon = icon("upload"),
-                  class = "btn-primary"
+            ),
+            column(9,
+                card(
+                    card_header("Interactive UMAP"),
+                    plotlyOutput("umap_plot", height = "600px")
                 )
-              )
             )
-          )
         ),
 
         fluidRow(
-          box(
-            title = "Controls",
-            status = "info",
-            solidHeader = TRUE,
-            width = 3,
-
-            selectInput(
-              "gsea_contrast_select",
-              "Select Contrast:",
-              choices = c("No contrasts loaded"),
-              selected = NULL
-            ),
-
-            selectInput(
-              "gsea_db_select",
-              "Gene Set Database:",
-              choices = c("GO BP" = "go_bp", "KEGG" = "kegg", "Reactome" = "reactome"),
-              selected = "go_bp"
-            ),
-
-            sliderInput(
-              "gsea_n_pathways",
-              "Number of pathways:",
-              min = 1,
-              max = 50,
-              value = 10,
-              step = 1
-            ),
-
-            sliderInput(
-              "gsea_padj_cutoff",
-              "Max adj. p-value:",
-              min = 0.01,
-              max = 1.0,
-              value = 1.0,
-              step = 0.01
+            column(12,
+                card(card_header("Cell Metadata Table"), DTOutput("metadata_table"))
             )
-          ),
-
-          box(
-            title = "GSEA Dotplot",
-            status = "success",
-            solidHeader = TRUE,
-            width = 9,
-            plotOutput("gsea_dotplot", height = "450px")
-          )
-        ),
-
-        fluidRow(
-          box(
-            title = "GSEA Ridgeplot",
-            status = "warning",
-            solidHeader = TRUE,
-            width = 6,
-            plotOutput("gsea_ridgeplot", height = "420px")
-          ),
-
-          box(
-            title = "GSEA Running Score (Multicolor)",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 6,
-            plotOutput("gsea_multiplot", height = "420px")
-          )
-        ),
-
-        conditionalPanel(
-          condition = "input.gsea_db_select === 'kegg'",
-          fluidRow(
-            box(
-              title = "Pathview Pathway Map",
-              status = "success",
-              solidHeader = TRUE,
-              width = 12,
-              selectInput(
-                "gsea_pathview_select",
-                "Select KEGG Pathway:",
-                choices = c("Loading..." = "")
-              ),
-              uiOutput("gsea_pathview")
-            )
-          )
-        ),
-
-        fluidRow(
-          box(
-            title = "Enriched Pathways Table",
-            status = "info",
-            solidHeader = TRUE,
-            width = 12,
-            collapsible = TRUE,
-            collapsed = TRUE,
-            DTOutput("gsea_table")
-          )
         )
-      ),
+    ),
 
-      # ========================================================================
-      # TAB 7: Annotation Station
-      # ========================================================================
-      tabItem(
-        tabName = "tab_annotation",
-        
-        h2("Annotation Station"),
-        
+    # =========================================================================
+    # Tab 4: Gene Expression
+    # =========================================================================
+    nav_panel(
+        title = "Gene Expression",
+        icon  = icon("dna"),
+
+        fluidRow(column(12, h4("Gene Expression Visualization",
+                               style = "font-weight: 600; color: #1565C0;"))),
+
         fluidRow(
-          box(
-            title = "Annotation Controls",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 3,
-            
-            textInput(
-              "annot_name",
-              "Annotation Name:",
-              value = "custom_annotation",
-              placeholder = "e.g., custom_first_annot"
+            column(3,
+                card(
+                    card_header("Settings"),
+                    textAreaInput(
+                        "gene_input", "Gene Name(s):",
+                        placeholder = "Single gene: DDX41\n\nMultiple genes (one per line):\nDDX41\nDHX34\nRPS27",
+                        rows = 8, width = "100%"
+                    ),
+                    actionButton("btn_plot_genes", "Plot Expression",
+                                 icon = icon("chart-line"), class = "btn-primary w-100"),
+                    helpText("Single gene: expression gradient. Multiple genes: gene set score (0-1)."),
+                    tags$hr(),
+                    tags$div(
+                        class = "top-n-section",
+                        tags$strong("Highlight Top Cells", style = "font-size: 0.88rem;"),
+                        tags$p(class = "text-muted",
+                               style = "font-size: 0.78rem; margin: 3px 0 6px 0;",
+                               "Mark top N expressing cells in red; all others in gray. Set 0 for normal gradient."),
+                        numericInput("gene_top_n_cells", "Top N cells to highlight:",
+                                     value = 0, min = 0, max = 5000, step = 10)
+                    )
+                )
             ),
-            
-            hr(),
-            
-            textAreaInput(
-              "annot_rules",
-              "Annotation Rules:",
-              placeholder = "leiden_0.5,4,HSC\nleiden_0.5,2,T cells\nleiden_1.0,0,Monocytes",
-              rows = 10,
-              width = "100%"
-            ),
-            
-            helpText(
-              "Format: clustering_name,cluster_id,label",
-              br(),
-              "One rule per line. Later rules override earlier ones."
-            ),
-            
-            hr(),
-            
-            h5("Visualization Settings"),
-            
-            selectInput(
-              "annot_umap_select",
-              "Select UMAP:",
-              choices = c("X_umap"),
-              selected = "X_umap"
-            ),
-            
-            sliderInput(
-              "annot_point_size",
-              "Point size:",
-              min = 1,
-              max = 10,
-              value = 5,
-              step = 0.5
-            ),
-            
-            sliderInput(
-              "annot_opacity",
-              "Opacity:",
-              min = 0.1,
-              max = 1,
-              value = 1,
-              step = 0.1
-            ),
-            
-            hr(),
-            
-            actionButton(
-              "btn_plot_annotation",
-              "Plot",
-              icon = icon("chart-area"),
-              class = "btn-primary btn-block"
-            ),
-            
-            br(),
-            
-            actionButton(
-              "btn_save_annotation",
-              "Save in Object",
-              icon = icon("save"),
-              class = "btn-success btn-block"
-            ),
-            
-            br(),
-            
-            radioButtons(
-              "annot_save_mode",
-              "Save mode:",
-              choices = c(
-                "Overwrite original" = "overwrite",
-                "Create new version" = "create_copy"
-              ),
-              selected = "create_copy"
+            column(9,
+                card(
+                    card_header("Expression UMAP"),
+                    plotlyOutput("gene_expression_umap", height = "600px")
+                )
             )
-          ),
-          
-          box(
-            title = "Custom Annotation UMAP",
-            status = "info",
-            solidHeader = TRUE,
-            width = 9,
-            
-            plotlyOutput("annotation_umap", height = "600px"),
-            
-            br(),
-            
-            verbatimTextOutput("annotation_stats")
-          )
         )
-      ),
+    ),
 
-      # ========================================================================
-      # TAB 8: About
-      # ========================================================================
-      tabItem(
-        tabName = "tab_about",
-        
-        h2("About scAnnex Dashboard"),
-        
+    # =========================================================================
+    # Tab 5: Differential Expression
+    # =========================================================================
+    nav_panel(
+        title = tags$span(
+            tags$span(class = "nav-label-long", "Differential Expression"),
+            tags$span(class = "nav-label-short", "DGE")
+        ),
+        icon = icon("chart-line"),
+
+        fluidRow(column(12, h4("Differential Gene Expression Analysis",
+                               style = "font-weight: 600; color: #1565C0;"))),
+
         fluidRow(
-          box(
-            title = "Project Information",
-            status = "primary",
-            solidHeader = TRUE,
-            width = 12,
-            
-            HTML("
-              <h3>scAnnex Dashboard</h3>
-              
-              <p>
-                Interactive visualization and exploration dashboard for single-cell RNA-seq data
-                processed through the <strong>scAnnex</strong> Nextflow pipeline.
-              </p>
-              
-              <h4>Dashboard Features:</h4>
-              <ul>
-                <li><strong>Quality Control Overview:</strong> Interactive QC metrics, thresholds tables, and before/after filtering plots</li>
-                <li><strong>UMAP Visualization:</strong> Interactive exploration with customizable coloring by metadata (batch, sample, condition, etc.)</li>
-                <li><strong>Automatic Cell-Type Annotation:</strong> Visualize CellTypist auto-annotations in the Clustering & UMAP tab</li>
-                <li><strong>Gene Expression:</strong> Single gene expression visualization on UMAP</li>
-                <li><strong>Gene Set Scoring:</strong> Calculate and visualize gene signature scores (0-1 normalized scale)</li>
-                <li><strong>Annotation Station:</strong> Create custom cell-type annotations by assigning labels to clusters, with real-time visualization and H5AD export</li>
-                <li><strong>Metadata Export:</strong> Filter and download cell metadata as CSV or Excel</li>
-                <li><strong>Auto-Detection:</strong> Automatically finds H5AD and QC files in results directory</li>
-              </ul>
-              
-              <h4>Pipeline Features:</h4>
-              <ul>
-                <li><strong>Unified Input:</strong> H5AD, RDS (Seurat), and MTX formats</li>
-                <li><strong>Quality Control:</strong> MAD-based automatic thresholding with detailed attrition tracking</li>
-                <li><strong>Doublet Detection:</strong> Scrublet integration for doublet removal</li>
-                <li><strong>Normalization:</strong> Log-normalization and highly variable gene detection</li>
-                <li><strong>Batch Integration:</strong> Harmony-based batch correction</li>
-                <li><strong>Dimensionality Reduction:</strong> PCA and UMAP generation</li>
-                <li><strong>Clustering:</strong> Leiden clustering with multiple resolutions</li>
-                <li><strong>Cell Type Annotation:</strong> Automated annotation using CellTypist</li>
-              </ul>
-              
-              <h4>Technology:</h4>
-              <ul>
-                <li><strong>Pipeline:</strong> Nextflow DSL2 + Python (Scanpy/AnnData)</li>
-                <li><strong>Dashboard:</strong> R Shiny + reticulate + plotly</li>
-                <li><strong>Execution:</strong> Conda environments or containerization (Docker/Apptainer)</li>
-              </ul>
-              
-              <h4>Documentation & Source Code:</h4>
-              <p>
-                <a href='https://github.com/damouzo/scAnnex' target='_blank' style='font-size: 16px;'>
-                  <i class='fa fa-github'></i> GitHub Repository: damouzo/scAnnex
-                </a>
-              </p>
-              <p>
-                Visit the repository for complete documentation, installation instructions, usage examples, and the latest updates.
-              </p>
-              
-              <hr>
-              
-              <p style='color: #666;'>
-                <em>Dashboard Version: 1.0.0 | Pipeline: scAnnex Nextflow</em>
-              </p>
-            ")
-          )
+            column(3,
+                card(
+                    card_header("Settings"),
+                    selectInput("dge_contrast_select", "Select Contrast:",
+                                choices = c("No contrasts loaded"), selected = NULL),
+                    tags$hr(),
+                    tags$h6("Filtering Options", style = "font-weight: 600; margin-bottom: 8px;"),
+                    numericInput("dge_pval_threshold", "Adj. P-value threshold:",
+                                 value = 0.05, min = 1e-10, max = 1, step = 0.001),
+                    numericInput("dge_logfc_threshold", "Log2 FC threshold:",
+                                 value = 0.25, min = 0, max = 10, step = 0.05),
+                    numericInput("dge_top_n_genes", "Top N genes to label:",
+                                 value = 10, min = 0, max = 200, step = 1),
+                    sliderInput("dge_gene_label_size", "Label font size:",
+                                min = 2, max = 8, value = 3, step = 0.5),
+                    helpText("Labels balance log2FC extremes and significance equally."),
+                    tags$hr(),
+                    actionButton("btn_apply_dge", "Apply",
+                                 icon = icon("play"), class = "btn-primary w-100"),
+                    br(), br(),
+                    downloadButton("btn_download_volcano", "Download Volcano (PNG)",
+                                   class = "btn-outline-secondary w-100 btn-sm")
+                )
+            ),
+            column(9,
+                navset_card_tab(
+                    nav_panel("Volcano Plot",
+                              plotOutput("dge_volcano_plot", height = "600px")),
+                    nav_panel("Significant Genes",
+                              DTOutput("dge_significant_genes_table"),
+                              br(),
+                              fluidRow(
+                                  column(5, downloadButton("btn_download_sig_genes",
+                                                           "Significant Genes (CSV)",
+                                                           class = "btn-sm btn-outline-secondary")),
+                                  column(5, downloadButton("btn_download_all_results",
+                                                           "All Results (CSV)",
+                                                           class = "btn-sm btn-outline-secondary"))
+                              ))
+                )
+            )
         )
-      )
+    ),
+
+    # =========================================================================
+    # Tab 6: GSEA
+    # =========================================================================
+    nav_panel(
+        title = "GSEA",
+        icon  = icon("route"),
+
+        fluidRow(column(12, h4("Gene Set Enrichment Analysis",
+                               style = "font-weight: 600; color: #1565C0;"))),
+
+        fluidRow(
+            column(3,
+                card(
+                    card_header("Settings"),
+                    selectInput("gsea_contrast_select", "Select Contrast:",
+                                choices = c("No contrasts loaded"), selected = NULL),
+                    selectInput("gsea_db_select", "Gene Set Database:",
+                                choices = c(
+                                    "GO Biological Process" = "go_bp",
+                                    "GO Molecular Function" = "go_mf",
+                                    "GO Cellular Component" = "go_cc",
+                                    "KEGG"                  = "kegg",
+                                    "Reactome"              = "reactome"
+                                ),
+                                selected = "go_bp"),
+                    numericInput("gsea_n_pathways", "Top N pathways:",
+                                 value = 10, min = 1, max = 50, step = 1),
+                    numericInput("gsea_n_gseaplot", "GSEA plot: top N:",
+                                 value = 5, min = 1, max = 20, step = 1),
+                    numericInput("gsea_padj_cutoff", "Max adj. p-value:",
+                                 value = 0.25, min = 0.001, max = 1, step = 0.01),
+                    actionButton("btn_apply_gsea", "Apply",
+                                 icon = icon("play"), class = "btn-primary w-100 mt-2")
+                )
+            ),
+            column(9,
+                uiOutput("gsea_main_panels")
+            )
+        )
+    ),
+
+    # =========================================================================
+    # Tab 7: Annotation Station
+    # =========================================================================
+    nav_panel(
+        title = tags$span(
+            tags$span(class = "nav-label-long", "Annotation Station"),
+            tags$span(class = "nav-label-short", "Annot.")
+        ),
+        icon = icon("tags"),
+
+        fluidRow(column(12, h4("Annotation Station",
+                               style = "font-weight: 600; color: #1565C0;"))),
+
+        fluidRow(
+            column(3,
+                card(
+                    card_header("Annotation Controls"),
+                    textInput("annot_name", "Annotation Name:",
+                              value = "custom_annotation",
+                              placeholder = "e.g., custom_first_annot"),
+                    tags$hr(),
+                    textAreaInput("annot_rules", "Annotation Rules:",
+                                  placeholder = "leiden_0.5,4,HSC\nleiden_0.5,2,T cells\nleiden_1.0,0,Monocytes",
+                                  rows = 10, width = "100%"),
+                    tags$p(class = "annotation-help",
+                           "Format: clustering_name,cluster_id,label", br(),
+                           "One rule per line. Later rules override earlier ones."),
+                    tags$hr(),
+                    h6("Visualization Settings", style = "font-weight: 600;"),
+                    selectInput("annot_umap_select", "Select UMAP:",
+                                choices = c("X_umap"), selected = "X_umap"),
+                    tags$div(
+                        style = "display: flex; gap: 10px;",
+                        tags$div(style = "flex:1;",
+                                 numericInput("annot_point_size", "Point size:",
+                                              value = 3, min = 0.5, max = 20, step = 0.5)),
+                        tags$div(style = "flex:1;",
+                                 numericInput("annot_opacity", "Opacity:",
+                                              value = 0.8, min = 0.1, max = 1, step = 0.05))
+                    ),
+                    tags$hr(),
+                    actionButton("btn_plot_annotation", "Plot",
+                                 icon = icon("chart-area"), class = "btn-primary w-100"),
+                    br(),
+                    actionButton("btn_save_annotation", "Save in Object",
+                                 icon = icon("save"), class = "btn-success w-100"),
+                    br(),
+                    radioButtons("annot_save_mode", "Save mode:",
+                                 choices = c("Overwrite original" = "overwrite",
+                                             "Create new version" = "create_copy"),
+                                 selected = "create_copy")
+                )
+            ),
+            column(9,
+                card(
+                    card_header("Custom Annotation UMAP"),
+                    plotlyOutput("annotation_umap", height = "560px"),
+                    br(),
+                    verbatimTextOutput("annotation_stats")
+                )
+            )
+        )
+    ),
+
+    # =========================================================================
+    # Tab 8: About
+    # =========================================================================
+    nav_panel(
+        title = "About",
+        icon  = icon("info-circle"),
+
+        fluidRow(
+            column(12,
+                card(
+                    card_header("About scAnnex"),
+                    HTML(paste0(
+                        "<h4>scAnnex Dashboard</h4>",
+                        "<p>Interactive visualization and exploration dashboard for single-cell RNA-seq data ",
+                        "processed through the <strong>scAnnex</strong> Nextflow DSL2 pipeline.</p>",
+                        "<h5>Dashboard Features</h5>",
+                        "<ul>",
+                        "<li><strong>Overview:</strong> Multi-sample QC summary, KPI cards, per-sample statistics, density plots</li>",
+                        "<li><strong>Quality Control by Sample:</strong> Per-sample QC metrics, thresholds, and before/after filtering plots</li>",
+                        "<li><strong>Clustering &amp; UMAP:</strong> Interactive UMAP; numeric point size/opacity; fixed-size legend markers</li>",
+                        "<li><strong>Gene Expression:</strong> Single gene or gene set scoring; top-N cell highlighting</li>",
+                        "<li><strong>Differential Expression:</strong> Volcano plots with balanced LFC+significance labeling</li>",
+                        "<li><strong>GSEA:</strong> Dotplot, Ridgeplot, GSEA running score, Pathview (KEGG), TreeDot tabs</li>",
+                        "<li><strong>Annotation Station:</strong> Custom cluster-to-label annotation with H5AD export</li>",
+                        "</ul>",
+                        "<hr>",
+                        "<p class='text-muted'><em>scAnnex v0.1.0 | Nextflow DSL2 + Python (Scanpy) + R Shiny + bslib</em></p>"
+                    ))
+                )
+            )
+        )
+    ),
+
+    nav_spacer(),
+    nav_item(
+        tags$small(class = "text-muted",
+                   paste0("scAnnex v0.1.0 | ", format(Sys.Date(), "%Y")))
     )
-  )
 )

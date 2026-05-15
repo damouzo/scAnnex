@@ -8,12 +8,15 @@ server <- function(input, output, session) {
   # ===========================================================================
   
   rv <- reactiveValues(
-    data_obj = NULL,
-    qc_report = NULL,
+    data_obj        = NULL,
+    qc_report       = NULL,
     qc_reports_multi = list(),
-    qc_plots = list(),
-    data_loaded = FALSE,
-    umap_color_choices = character(0),
+    qc_plots        = list(),
+    qc_cells_data   = NULL,
+    data_loaded     = FALSE,
+    h5ad_path       = DEFAULT_MERGED_H5AD,
+    results_dir     = RESULTS_DIR,
+    umap_color_choices   = character(0),
     umap_color_label_map = list()
   )
 
@@ -35,207 +38,235 @@ server <- function(input, output, session) {
     ifelse(out == "", x, out)
   }
 
-  # Initialize sample selector choices
+  # =========================================================================
+  # AUTO-LOAD on startup (replaces manual Load Data button)
+  # =========================================================================
   observeEvent(TRUE, {
-    if (length(DEFAULT_SAMPLE_IDS) > 0) {
-      updateSelectInput(
-        session,
-        "sample_select",
-        choices = DEFAULT_SAMPLE_IDS,
-        selected = DEFAULT_SAMPLE_IDS[1]
+    withProgress(message = "Initializing scAnnex dashboard...", value = 0, {
+
+      # -- 1. QC reports ----------------------------------------------------
+      tryCatch({
+        incProgress(0.1, detail = "Loading QC reports")
+        rv$qc_reports_multi <- load_all_qc_reports(RESULTS_DIR)
+        if (length(rv$qc_reports_multi) > 0) {
+          sample_choices <- names(rv$qc_reports_multi)
+          rv$qc_report   <- rv$qc_reports_multi[[sample_choices[1]]]
+          updateSelectInput(session, "qc_sample_select",
+                            choices = sample_choices, selected = sample_choices[1])
+        }
+      }, error = function(e) message("QC reports: ", e$message))
+
+      # -- 2. QC cell data for density plots --------------------------------
+      tryCatch({
+        incProgress(0.05, detail = "Loading per-cell QC data")
+        rv$qc_cells_data <- load_qc_cells_data(RESULTS_DIR)
+      }, error = function(e) message("QC cells data: ", e$message))
+
+      # -- 3. H5AD (main bottleneck) ----------------------------------------
+      if (nzchar(DEFAULT_MERGED_H5AD) && file.exists(DEFAULT_MERGED_H5AD)) {
+        tryCatch({
+          incProgress(0.4, detail = "Loading H5AD (this may take a moment)")
+          rv$data_obj <- load_h5ad_data(DEFAULT_MERGED_H5AD, backed = FALSE)
+          rv$h5ad_path <- DEFAULT_MERGED_H5AD
+
+          rv$umap_color_choices <- setdiff(names(rv$data_obj$metadata), "cell_id")
+          label_choices <- vapply(rv$umap_color_choices, sanitize_color_name, character(1))
+          rv$umap_color_label_map <- as.list(label_choices)
+          names(rv$umap_color_label_map) <- rv$umap_color_choices
+          display_choices <- setNames(rv$umap_color_choices, label_choices)
+
+          updateSelectInput(session, "umap_color_by",
+                            choices  = display_choices,
+                            selected = if ("batch" %in% rv$umap_color_choices) "batch"
+                                       else rv$umap_color_choices[1])
+          rv$data_loaded <- TRUE
+        }, error = function(e) message("H5AD load: ", e$message))
+      }
+
+      # -- 4. DGE -----------------------------------------------------------
+      if (nzchar(DEFAULT_DGE_DIR) && dir.exists(DEFAULT_DGE_DIR)) {
+        tryCatch({
+          incProgress(0.15, detail = "Loading DGE results")
+          load_dge_results(DEFAULT_DGE_DIR, show_progress = FALSE)
+        }, error = function(e) message("DGE: ", e$message))
+      }
+
+      # -- 5. GSEA ----------------------------------------------------------
+      if (nzchar(DEFAULT_GSEA_DIR) && dir.exists(DEFAULT_GSEA_DIR)) {
+        tryCatch({
+          incProgress(0.25, detail = "Loading GSEA results")
+          load_gsea_results(DEFAULT_GSEA_DIR, show_progress = FALSE)
+        }, error = function(e) message("GSEA: ", e$message))
+      }
+
+      incProgress(0.05, detail = "Ready")
+    })
+  }, once = TRUE, ignoreNULL = FALSE, ignoreInit = FALSE)
+
+  # is_integrated: TRUE when multi-sample QC reports are present
+  output$is_integrated <- reactive({
+    length(rv$qc_reports_multi) > 1
+  })
+  outputOptions(output, "is_integrated", suspendWhenHidden = FALSE)
+
+  # Overview: results directory label
+  output$overview_results_dir_label <- renderText({
+    if (nzchar(rv$results_dir) && dir.exists(rv$results_dir)) {
+      paste0("Results: ", rv$results_dir)
+    } else {
+      "Results directory not found — set SCANNEX_RESULTS_DIR environment variable"
+    }
+  })
+
+  # Overview: KPI card values
+  output$ov_n_samples <- renderText({
+    n <- length(rv$qc_reports_multi)
+    if (n == 0) "—" else as.character(n)
+  })
+
+  output$ov_cells_before <- renderText({
+    reps <- rv$qc_reports_multi
+    if (length(reps) == 0) return("—")
+    total <- sum(vapply(reps, function(r) {
+      as.integer(r$filtering_statistics$cells_initial %||% 0)
+    }, integer(1)))
+    format_number(total)
+  })
+
+  output$ov_cells_after <- renderText({
+    reps <- rv$qc_reports_multi
+    if (length(reps) == 0) return("—")
+    total <- sum(vapply(reps, function(r) {
+      as.integer(r$filtering_statistics$cells_final %||% 0)
+    }, integer(1)))
+    format_number(total)
+  })
+
+  output$ov_avg_retention <- renderText({
+    reps <- rv$qc_reports_multi
+    if (length(reps) == 0) return("—")
+    vals <- vapply(reps, function(r) {
+      as.numeric(r$filtering_statistics$cells_retained_pct %||% NA_real_)
+    }, numeric(1))
+    vals <- vals[!is.na(vals)]
+    if (length(vals) == 0) return("—")
+    sprintf("%.1f%%", mean(vals))
+  })
+
+  output$ov_avg_genes <- renderText({
+    reps <- rv$qc_reports_multi
+    if (length(reps) == 0) return("—")
+    vals <- vapply(reps, function(r) {
+      as.numeric(r$qc_metrics_after$n_genes_by_counts$median %||% NA_real_)
+    }, numeric(1))
+    vals <- vals[!is.na(vals)]
+    if (length(vals) == 0) return("—")
+    format_number(round(mean(vals)))
+  })
+
+  output$ov_avg_mt <- renderText({
+    reps <- rv$qc_reports_multi
+    if (length(reps) == 0) return("—")
+    vals <- vapply(reps, function(r) {
+      as.numeric(r$qc_metrics_after$pct_counts_mt$median %||% NA_real_)
+    }, numeric(1))
+    vals <- vals[!is.na(vals)]
+    if (length(vals) == 0) return("—")
+    sprintf("%.1f%%", mean(vals))
+  })
+
+  # Overview: per-sample summary table
+  output$overview_sample_table <- renderDT({
+    reps <- rv$qc_reports_multi
+    if (length(reps) == 0) {
+      return(datatable(data.frame(Message = "QC reports not loaded"),
+                       options = list(dom = "t"), rownames = FALSE))
+    }
+    rows <- lapply(names(reps), function(sid) {
+      r  <- reps[[sid]]
+      fs <- r$filtering_statistics
+      ma <- r$qc_metrics_after
+      data.frame(
+        Sample            = sid,
+        Cells_Before      = as.integer(fs$cells_initial    %||% NA),
+        Cells_After       = as.integer(fs$cells_final      %||% NA),
+        Retention_pct     = round(as.numeric(fs$cells_retained_pct %||% NA), 1),
+        Genes_After       = as.integer(fs$genes_final      %||% NA),
+        Median_Genes      = round(as.numeric(ma$n_genes_by_counts$median %||% NA), 0),
+        Median_Counts     = round(as.numeric(ma$total_counts$median      %||% NA), 0),
+        Median_MT_pct     = round(as.numeric(ma$pct_counts_mt$median     %||% NA), 2),
+        stringsAsFactors  = FALSE, check.names = FALSE
       )
-    }
-  }, once = TRUE)
+    })
+    df <- do.call(rbind, rows)
+    datatable(df,
+      options = list(pageLength = 20, scrollX = TRUE, dom = "frtip"),
+      rownames = FALSE
+    ) %>%
+    formatStyle("Retention_pct",
+      background = styleColorBar(c(0, 100), "#b3d9f7"),
+      backgroundSize = "100% 90%",
+      backgroundRepeat = "no-repeat",
+      backgroundPosition = "center"
+    )
+  })
 
-  # Auto-populate paths based on selected mode/sample
-  observe({
-    req(input$data_mode)
+  # Shared color palette for density plots (derived from sample IDs in qc_cells_data)
+  sa_palette <- reactive({
+    req(rv$qc_cells_data)
+    get_sample_palette(unique(rv$qc_cells_data$sample_id))
+  })
 
-    if (identical(input$data_mode, "integrated")) {
-      if (nzchar(DEFAULT_MERGED_H5AD)) {
-        updateTextInput(session, "input_h5ad_path", value = DEFAULT_MERGED_H5AD)
-      }
-      if (nzchar(DEFAULT_QC_DIR)) {
-        updateTextInput(session, "input_qc_dir", value = DEFAULT_QC_DIR)
-      }
-      if (nzchar(DEFAULT_DGE_DIR)) {
-        updateTextInput(session, "input_dge_dir", value = DEFAULT_DGE_DIR)
-      }
-      if (nzchar(DEFAULT_GSEA_DIR)) {
-        updateTextInput(session, "input_gsea_dir", value = DEFAULT_GSEA_DIR)
-      }
-    }
+  overview_density_plot <- function(metric_col, x_label) {
+    req(rv$qc_cells_data)
+    df  <- rv$qc_cells_data
+    pal <- sa_palette()
+    req(metric_col %in% names(df))
+    ggplot(df, aes_string(x = metric_col, color = "sample_id", fill = "sample_id")) +
+      geom_density(alpha = 0.12, linewidth = 0.7) +
+      scale_color_manual(values = pal) +
+      scale_fill_manual(values  = pal) +
+      labs(x = x_label, y = "Density", color = "Sample", fill = "Sample") +
+      theme_bw(base_size = 12) +
+      theme(
+        legend.position  = "bottom",
+        legend.text      = element_text(size = 8),
+        legend.key.size  = unit(0.5, "lines"),
+        panel.grid.minor = element_blank()
+      ) +
+      guides(fill = guide_legend(nrow = 3), color = guide_legend(nrow = 3))
+  }
 
-    if (identical(input$data_mode, "single")) {
-      req(input$sample_select)
-      if (input$sample_select %in% names(DEFAULT_SAMPLE_H5AD_FILES)) {
-        updateTextInput(
-          session,
-          "input_h5ad_path",
-          value = DEFAULT_SAMPLE_H5AD_FILES[[input$sample_select]]
-        )
-      }
-      if (nzchar(DEFAULT_QC_DIR)) {
-        updateTextInput(session, "input_qc_dir", value = DEFAULT_QC_DIR)
-      }
+  output$overview_density_mt <- renderPlot({
+    overview_density_plot("pct_counts_mt", "Mitochondrial %")
+  })
+  output$overview_density_genes <- renderPlot({
+    overview_density_plot("n_genes_by_counts", "Genes per cell")
+  })
+  output$overview_density_counts <- renderPlot({
+    overview_density_plot("total_counts", "Total counts")
+  })
+
+  output$overview_density_status <- renderUI({
+    if (is.null(rv$qc_cells_data)) {
+      tags$p(class = "text-muted", style = "padding: 8px;",
+             "Per-cell QC data not available (pipeline must have generated *_qc.h5ad files).")
     }
   })
   
   # ===========================================================================
   # DATA LOADING
   # ===========================================================================
-  
-  # Load data when button clicked
-  observeEvent(input$btn_load_data, {
+  # (Data loading is now handled automatically by the startup observer above)
 
-    selected_h5ad_path <- input$input_h5ad_path
-    selected_qc_dir <- input$input_qc_dir
-
-    if (identical(input$data_mode, "single") &&
-        !is.null(input$sample_select) &&
-        input$sample_select %in% names(DEFAULT_SAMPLE_H5AD_FILES)) {
-      selected_h5ad_path <- DEFAULT_SAMPLE_H5AD_FILES[[input$sample_select]]
-    }
-
-    req(selected_h5ad_path)
-    
-    withProgress(message = 'Loading data...', value = 0, {
-      
-      tryCatch({
-        
-        # Check file exists
-        if (!file.exists(selected_h5ad_path)) {
-          stop(sprintf("File not found: %s", selected_h5ad_path))
-        }
-        
-        incProgress(0.2, detail = "Reading H5AD file")
-        
-        # Load H5AD data
-        rv$data_obj <- load_h5ad_data(
-          selected_h5ad_path,
-          backed = input$input_backed_mode
-        )
-        
-        incProgress(0.4, detail = "Loading QC report")
-        
-        # Load QC report if directory exists
-        if (dir.exists(selected_qc_dir)) {
-          rv$qc_plots <- get_qc_plots(selected_qc_dir)
-
-          if (identical(input$data_mode, "integrated")) {
-            normalized_qc_dir <- normalizePath(selected_qc_dir, mustWork = TRUE)
-            results_dir <- if (basename(normalized_qc_dir) == "qc") {
-              dirname(normalized_qc_dir)
-            } else {
-              normalized_qc_dir
-            }
-
-            rv$qc_reports_multi <- load_all_qc_reports(results_dir)
-
-            if (length(rv$qc_reports_multi) > 0) {
-              sample_choices <- names(rv$qc_reports_multi)
-              updateSelectInput(
-                session,
-                "qc_sample_select",
-                choices = sample_choices,
-                selected = sample_choices[1]
-              )
-              rv$qc_report <- rv$qc_reports_multi[[sample_choices[1]]]
-
-              sample_plots <- get_qc_plots_for_sample(results_dir, sample_choices[1])
-              if (length(sample_plots) > 0) {
-                rv$qc_plots <- sample_plots
-              }
-            } else {
-              rv$qc_report <- load_qc_report(selected_qc_dir)
-            }
-          } else {
-            rv$qc_reports_multi <- list()
-            rv$qc_report <- load_qc_report(selected_qc_dir)
-          }
-        } else {
-          rv$qc_report <- NULL
-          rv$qc_reports_multi <- list()
-          rv$qc_plots <- list()
-        }
-        
-        incProgress(0.2, detail = "Preparing visualization")
-        
-        # Update color choices for UMAP
-        rv$umap_color_choices <- setdiff(
-          names(rv$data_obj$metadata),
-          c("cell_id")
-        )
-
-        label_choices <- vapply(rv$umap_color_choices, sanitize_color_name, character(1))
-        rv$umap_color_label_map <- as.list(label_choices)
-        names(rv$umap_color_label_map) <- rv$umap_color_choices
-        display_choices <- setNames(rv$umap_color_choices, label_choices)
-        
-        # Update selectInput choices
-        updateSelectInput(
-          session,
-          "umap_color_by",
-          choices = display_choices,
-          selected = if("batch" %in% rv$umap_color_choices) "batch" else rv$umap_color_choices[1]
-        )
-        
-        incProgress(0.2, detail = "Done!")
-        
-        rv$data_loaded <- TRUE
-        
-        showNotification(
-          "Data loaded successfully!",
-          type = "message",
-          duration = 3
-        )
-        
-      }, error = function(e) {
-        showNotification(
-          paste("Error loading data:", e$message),
-          type = "error",
-          duration = 10
-        )
-        rv$data_loaded <- FALSE
-      })
-    })
-  })
-  
-  # Data load status text
-  output$data_load_status <- renderText({
-    if (rv$data_loaded) {
-      sprintf(
-        "✓ Data loaded successfully\n\nMode: %s\nDataset: %s cells × %s genes\nBacked mode: %s\nQC report: %s",
-        ifelse(identical(input$data_mode, "single"), "Single sample", "Integrated"),
-        format_number(rv$data_obj$n_cells),
-        format_number(rv$data_obj$n_genes),
-        ifelse(rv$data_obj$backed, "Yes", "No"),
-        ifelse(is.null(rv$qc_report), "Not available", "Loaded")
-      )
-    } else {
-      "No data loaded. Click 'Load Data' to begin."
-    }
-  })
-  
-  # Sidebar dataset info
-  output$sidebar_dataset_info <- renderText({
-    if (rv$data_loaded) {
-      sprintf(
-        "%s cells\n%s genes",
-        format_number(rv$data_obj$n_cells),
-        format_number(rv$data_obj$n_genes)
-      )
-    } else {
-      "No data loaded"
-    }
-  })
   
   # ===========================================================================
   # TAB 2: QC OVERVIEW
   # ===========================================================================
 
   qc_report_active <- reactive({
-    if (identical(input$data_mode, "integrated") && length(rv$qc_reports_multi) > 0) {
+    # Multi-sample: use per-sample selector when more than one report is loaded
+    if (length(rv$qc_reports_multi) > 0) {
       selected_sample <- input$qc_sample_select
       if (!is.null(selected_sample) && selected_sample %in% names(rv$qc_reports_multi)) {
         return(rv$qc_reports_multi[[selected_sample]])
@@ -246,19 +277,12 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$qc_sample_select, {
-    req(identical(input$data_mode, "integrated"))
-    req(input$input_qc_dir)
     req(input$qc_sample_select)
+    results_dir <- rv$results_dir
+    if (!nzchar(results_dir) || !dir.exists(results_dir)) return()
 
-    if (!dir.exists(input$input_qc_dir)) {
-      return()
-    }
-
-    normalized_qc_dir <- normalizePath(input$input_qc_dir, mustWork = TRUE)
-    results_dir <- if (basename(normalized_qc_dir) == "qc") {
-      dirname(normalized_qc_dir)
-    } else {
-      normalized_qc_dir
+    if (input$qc_sample_select %in% names(rv$qc_reports_multi)) {
+      rv$qc_report <- rv$qc_reports_multi[[input$qc_sample_select]]
     }
 
     sample_plots <- get_qc_plots_for_sample(results_dir, input$qc_sample_select)
@@ -267,61 +291,37 @@ server <- function(input, output, session) {
     }
   }, ignoreInit = TRUE)
   
-  # QC Info Boxes
-  output$qc_box_cells_before <- renderInfoBox({
+  # QC Summary value boxes
+  output$qc_box_cells_before <- renderUI({
     report <- qc_report_active()
     req(report)
-    
-    n_cells <- report$filtering_statistics$cells_initial
-    
-    infoBox(
-      "Cells (Before QC)",
-      format_number(n_cells),
-      icon = icon("circle"),
-      color = "blue"
-    )
+    n <- format_number(report$filtering_statistics$cells_initial)
+    value_box(title = "Cells (Before QC)", value = n,
+              showcase = icon("circle"), theme = "primary")
   })
-  
-  output$qc_box_cells_after <- renderInfoBox({
+
+  output$qc_box_cells_after <- renderUI({
     report <- qc_report_active()
     req(report)
-    
-    n_cells <- report$filtering_statistics$cells_final
-    
-    infoBox(
-      "Cells (After QC)",
-      format_number(n_cells),
-      icon = icon("check-circle"),
-      color = "green"
-    )
+    n <- format_number(report$filtering_statistics$cells_final)
+    value_box(title = "Cells (After QC)", value = n,
+              showcase = icon("check-circle"), theme = "success")
   })
-  
-  output$qc_box_genes_after <- renderInfoBox({
+
+  output$qc_box_genes_after <- renderUI({
     report <- qc_report_active()
     req(report)
-    
-    n_genes <- report$filtering_statistics$genes_final
-    
-    infoBox(
-      "Genes (After QC)",
-      format_number(n_genes),
-      icon = icon("dna"),
-      color = "purple"
-    )
+    n <- format_number(report$filtering_statistics$genes_final)
+    value_box(title = "Genes (After QC)", value = n,
+              showcase = icon("dna"), theme = "info")
   })
-  
-  output$qc_box_retention <- renderInfoBox({
+
+  output$qc_box_retention <- renderUI({
     report <- qc_report_active()
     req(report)
-    
-    retention_pct <- report$filtering_statistics$cells_retained_pct
-    
-    infoBox(
-      "Cell Retention",
-      sprintf("%.1f%%", retention_pct),
-      icon = icon("percentage"),
-      color = "yellow"
-    )
+    pct <- sprintf("%.1f%%", as.numeric(report$filtering_statistics$cells_retained_pct))
+    value_box(title = "Cell Retention", value = pct,
+              showcase = icon("percent"), theme = "warning")
   })
   
   # QC Metrics Table
@@ -582,11 +582,11 @@ server <- function(input, output, session) {
 
     p <- p %>%
       layout(
-        title = sprintf("UMAP colored by %s", legend_title),
-        xaxis = list(title = "UMAP 1"),
-        yaxis = list(title = "UMAP 2"),
-        legend = list(title = list(text = legend_title)),
-        hovermode = 'closest'
+        title  = sprintf("UMAP colored by %s", legend_title),
+        xaxis  = list(title = "UMAP 1"),
+        yaxis  = list(title = "UMAP 2"),
+        legend = list(title = list(text = legend_title), itemsizing = "constant"),
+        hovermode = "closest"
       )
     
     return(p)
@@ -675,36 +675,58 @@ server <- function(input, output, session) {
           
           # Get gene expression
           expr <- get_gene_expression(rv$data_obj, gene_name)
-          
+
           # Merge with UMAP coords
           umap_data <- rv$data_obj$umap_coords
           umap_data$expression <- expr[umap_data$cell_id]
-          
-          # Create plot
-          p <- plot_ly(
-            data = umap_data,
-            x = ~UMAP_1,
-            y = ~UMAP_2,
-            type = 'scattergl',
-            mode = 'markers',
-            marker = list(
-              size = 3,
-              opacity = 0.7,
-              color = ~expression,
-              colorscale = 'Viridis',
-              showscale = TRUE,
-              colorbar = list(title = "Expression")
-            ),
-            text = ~paste("Cell:", cell_id, "<br>Expression:", round(expression, 2)),
-            hoverinfo = 'text'
-          ) %>%
-            layout(
-              title = sprintf("Expression of %s", gene_name),
-              xaxis = list(title = "UMAP 1"),
-              yaxis = list(title = "UMAP 2"),
-              hovermode = 'closest'
+
+          top_n <- as.integer(input$gene_top_n_cells %||% 0)
+
+          if (top_n > 0) {
+            # ---- Top-N highlight mode: red vs gray ----
+            thresh <- sort(umap_data$expression, decreasing = TRUE)[min(top_n, nrow(umap_data))]
+            umap_data$is_top <- umap_data$expression >= thresh
+            # Sort so top cells render on top
+            umap_data <- umap_data[order(umap_data$is_top), ]
+
+            p <- plot_ly(
+              data   = umap_data,
+              x      = ~UMAP_1, y = ~UMAP_2,
+              type   = "scattergl", mode = "markers",
+              marker = list(size    = input$umap_point_size %||% 3,
+                            opacity = input$umap_opacity    %||% 0.7,
+                            color   = ifelse(umap_data$is_top, "red", "lightgray")),
+              text     = ~paste0("Cell: ", cell_id, "<br>Expression: ", round(expression, 2),
+                                 "<br>Top ", top_n, ": ", ifelse(is_top, "yes", "no")),
+              hoverinfo = "text"
+            ) %>% layout(
+              title = sprintf("Expression of %s (top %d cells highlighted)", gene_name, top_n),
+              xaxis = list(title = "UMAP 1"), yaxis = list(title = "UMAP 2"),
+              hovermode = "closest"
             )
-          
+          } else {
+            # ---- Normal gradient mode ----
+            p <- plot_ly(
+              data   = umap_data,
+              x      = ~UMAP_1, y = ~UMAP_2,
+              type   = "scattergl", mode = "markers",
+              marker = list(
+                size       = input$umap_point_size %||% 3,
+                opacity    = input$umap_opacity    %||% 0.7,
+                color      = ~expression,
+                colorscale = "Viridis",
+                showscale  = TRUE,
+                colorbar   = list(title = "Expression")
+              ),
+              text     = ~paste("Cell:", cell_id, "<br>Expression:", round(expression, 2)),
+              hoverinfo = "text"
+            ) %>% layout(
+              title = sprintf("Expression of %s", gene_name),
+              xaxis = list(title = "UMAP 1"), yaxis = list(title = "UMAP 2"),
+              hovermode = "closest"
+            )
+          }
+
           return(p)
           
         }, error = function(e) {
@@ -865,58 +887,8 @@ server <- function(input, output, session) {
     }
   }
   
-  # Load DGE results
-  observeEvent(input$btn_load_dge, {
-    
-    req(input$input_dge_dir)
-    
-    withProgress(message = 'Loading DGE results...', value = 0, {
-      
-      tryCatch({
-        load_dge_results(input$input_dge_dir, show_progress = TRUE)
-        
-        showNotification(
-          sprintf("Loaded %d contrasts successfully", length(rv_dge$contrasts)),
-          type = "message",
-          duration = 3
-        )
-        
-      }, error = function(e) {
-        showNotification(
-          paste("Error loading DGE results:", e$message),
-          type = "error",
-          duration = 10
-        )
-        rv_dge$dge_loaded <- FALSE
-      })
-    })
-  })
+  # (DGE loading is now handled by the startup auto-load observer)
 
-  # Auto-load DGE results for integrated mode when data is loaded
-  observeEvent(rv$data_loaded, {
-    if (!isTRUE(rv$data_loaded) || !identical(input$data_mode, "integrated")) {
-      return()
-    }
-
-    dge_dir <- input$input_dge_dir
-    if (!rv_dge$dge_loaded && !is.null(dge_dir) && nzchar(dge_dir) && dir.exists(dge_dir)) {
-      tryCatch({
-        load_dge_results(dge_dir, show_progress = FALSE)
-        showNotification(
-          sprintf("Auto-loaded DGE results (%d contrasts)", length(rv_dge$contrasts)),
-          type = "message",
-          duration = 3
-        )
-      }, error = function(e) {
-        showNotification(
-          paste("DGE auto-load skipped:", e$message),
-          type = "warning",
-          duration = 5
-        )
-      })
-    }
-  }, ignoreInit = TRUE)
-  
   # Volcano plot
   output$dge_volcano_plot <- renderPlot({
     req(rv_dge$dge_loaded)
@@ -986,28 +958,34 @@ server <- function(input, output, session) {
         plot.title = element_text(hjust = 0.5, face = "bold")
       )
     
-    # Add gene labels if requested
-    if (input$dge_show_gene_names && input$dge_top_n_genes > 0) {
-      
-      # Get top N significant genes by p-value
-      top_genes <- dge_df %>%
-        filter(significant) %>%
-        arrange(pvalue_adj) %>%
-        head(input$dge_top_n_genes)
-      
-      if (nrow(top_genes) > 0) {
-        p <- p + 
-          ggrepel::geom_text_repel(
-            data = top_genes,
-            aes(label = gene),
-            size = input$dge_gene_label_size,
-            max.overlaps = 20,
-            box.padding = 0.5,
-            point.padding = 0.3
-          )
+    # Add gene labels using combined LFC + significance score
+    if (input$dge_top_n_genes > 0) {
+      sig_df <- dge_df %>% filter(significant)
+      if (nrow(sig_df) > 0) {
+        max_lfc <- max(abs(sig_df$log2_fc), na.rm = TRUE)
+        max_nlp <- max(-log10(sig_df$pvalue_adj), na.rm = TRUE)
+        top_genes <- sig_df %>%
+          mutate(score = sqrt(
+            (abs(log2_fc) / pmax(max_lfc, 1e-9))^2 +
+            (-log10(pvalue_adj) / pmax(max_nlp, 1e-9))^2
+          )) %>%
+          arrange(desc(score)) %>%
+          head(input$dge_top_n_genes)
+
+        if (nrow(top_genes) > 0) {
+          p <- p +
+            ggrepel::geom_text_repel(
+              data  = top_genes,
+              aes(label = gene),
+              size  = input$dge_gene_label_size,
+              max.overlaps  = 25,
+              box.padding   = 0.5,
+              point.padding = 0.3
+            )
+        }
       }
     }
-    
+
     print(p)
   })
   
@@ -1141,21 +1119,29 @@ server <- function(input, output, session) {
           plot.title = element_text(hjust = 0.5, face = "bold")
         )
       
-      # Add gene labels if requested
-      if (input$dge_show_gene_names && input$dge_top_n_genes > 0) {
-        top_genes <- dge_df %>%
-          filter(significant) %>%
-          arrange(pvalue_adj) %>%
-          head(input$dge_top_n_genes)
-        
-        if (nrow(top_genes) > 0) {
-          p <- p + 
-            ggrepel::geom_text_repel(
-              data = top_genes,
-              aes(label = gene),
-              size = input$dge_gene_label_size,
-              max.overlaps = 20
-            )
+      # Add gene labels using combined LFC + significance score
+      if (input$dge_top_n_genes > 0) {
+        sig_df <- dge_df %>% filter(significant)
+        if (nrow(sig_df) > 0) {
+          max_lfc <- max(abs(sig_df$log2_fc), na.rm = TRUE)
+          max_nlp <- max(-log10(sig_df$pvalue_adj), na.rm = TRUE)
+          top_genes <- sig_df %>%
+            mutate(score = sqrt(
+              (abs(log2_fc) / pmax(max_lfc, 1e-9))^2 +
+              (-log10(pvalue_adj) / pmax(max_nlp, 1e-9))^2
+            )) %>%
+            arrange(desc(score)) %>%
+            head(input$dge_top_n_genes)
+
+          if (nrow(top_genes) > 0) {
+            p <- p +
+              ggrepel::geom_text_repel(
+                data  = top_genes,
+                aes(label = gene),
+                size  = input$dge_gene_label_size,
+                max.overlaps = 25
+              )
+          }
         }
       }
       
@@ -1304,60 +1290,61 @@ server <- function(input, output, session) {
       default_top <- 10
     }
 
-    updateSliderInput(
+    updateNumericInput(
       session,
       "gsea_n_pathways",
-      min = 1,
-      max = detected_max,
-      value = min(default_top, detected_max)
+      value = min(as.integer(default_top), detected_max),
+      max   = detected_max
     )
   }
 
-  observeEvent(input$btn_load_gsea, {
-    req(input$input_gsea_dir)
+  # (GSEA loading is handled by the startup auto-load observer)
 
-    withProgress(message = "Loading GSEA results...", value = 0, {
-      tryCatch({
-        load_gsea_results(input$input_gsea_dir, show_progress = TRUE)
-        showNotification(
-          sprintf("Loaded GSEA results for %d contrasts", length(rv_gsea$contrasts)),
-          type = "message",
-          duration = 3
-        )
-      }, error = function(e) {
-        rv_gsea$loaded <- FALSE
-        showNotification(
-          paste("Error loading GSEA results:", e$message),
-          type = "error",
-          duration = 8
-        )
-      })
-    })
+  # Dynamic GSEA navset panel (Dotplot / Ridgeplot / GSEA Plot / Table / Pathview / TreeDot)
+  output$gsea_main_panels <- renderUI({
+    if (!isTRUE(rv_gsea$loaded)) {
+      return(card(
+        card_header("GSEA"),
+        tags$p(class = "text-muted p-3",
+               "GSEA results are being loaded. If nothing appears, ensure the pipeline has run with GSEA enabled.")
+      ))
+    }
+
+    is_kegg <- isTRUE(input$gsea_db_select == "kegg")
+
+    base_panels <- list(
+      nav_panel("Dot Plot",
+                plotOutput("gsea_dotplot", height = "450px")),
+      nav_panel("Ridgeplot",
+                plotOutput("gsea_ridgeplot", height = "420px")),
+      nav_panel("GSEA Plot",
+                plotOutput("gsea_multiplot", height = "440px")),
+      nav_panel("Results Table",
+                DTOutput("gsea_table"))
+    )
+
+    if (is_kegg) {
+      base_panels <- c(base_panels, list(
+        nav_panel("Pathview",
+                  tags$div(
+                    style = "padding: 8px;",
+                    selectInput("gsea_pathview_select",
+                                "Select Pathway:",
+                                choices  = c("Loading..." = ""),
+                                selected = ""),
+                    uiOutput("gsea_pathview")
+                  ))
+      ))
+    }
+
+    base_panels <- c(base_panels, list(
+      nav_panel("TreeDot",
+                tags$p(class = "text-muted p-3",
+                       "TreeDot visualization requires a multi-contrast ORA analysis. Not yet available for this dataset."))
+    ))
+
+    do.call(navset_card_tab, base_panels)
   })
-
-  observeEvent(rv$data_loaded, {
-    if (!isTRUE(rv$data_loaded) || !identical(input$data_mode, "integrated")) {
-      return()
-    }
-
-    gsea_dir <- input$input_gsea_dir
-    if (!rv_gsea$loaded && !is.null(gsea_dir) && nzchar(gsea_dir) && dir.exists(gsea_dir)) {
-      tryCatch({
-        load_gsea_results(gsea_dir, show_progress = FALSE)
-        showNotification(
-          sprintf("Auto-loaded GSEA results (%d contrasts)", length(rv_gsea$contrasts)),
-          type = "message",
-          duration = 3
-        )
-      }, error = function(e) {
-        showNotification(
-          paste("GSEA auto-load skipped:", e$message),
-          type = "warning",
-          duration = 5
-        )
-      })
-    }
-  }, ignoreInit = TRUE)
 
   output$gsea_dotplot <- renderPlot({
     if (!isTRUE(rv_gsea$loaded)) return(invisible(NULL))
@@ -1691,7 +1678,7 @@ server <- function(input, output, session) {
     
     req(rv_annotation$labels)
     req(rv$data_obj)
-    req(input$input_h5ad_path)
+    req(nzchar(rv$h5ad_path %||% ""))
     
     isolate({
       
@@ -1708,11 +1695,11 @@ server <- function(input, output, session) {
           
           # Save annotation
           output_path <- save_annotation_to_h5ad(
-            h5ad_path = input$input_h5ad_path,
+            h5ad_path       = rv$h5ad_path,
             annotation_name = rv_annotation$annotation_name,
-            labels = rv_annotation$labels,
-            output_path = NULL,
-            create_copy = create_copy
+            labels          = rv_annotation$labels,
+            output_path     = NULL,
+            create_copy     = create_copy
           )
           
           incProgress(0.4, detail = "Done!")
@@ -1749,8 +1736,8 @@ server <- function(input, output, session) {
             Sys.sleep(1)
             
             rv$data_obj <- load_h5ad_data(
-              input$input_h5ad_path,
-              backed = input$input_backed_mode
+              rv$h5ad_path,
+              backed = FALSE
             )
             
             # Update color choices
