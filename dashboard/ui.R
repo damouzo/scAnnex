@@ -118,13 +118,16 @@ ui <- page_navbar(
             )
         ),
 
-        fluidRow(
-            column(2, uiOutput("qc_box_cells_before")),
-            column(2, uiOutput("qc_box_cells_after")),
-            column(2, uiOutput("qc_box_genes_after")),
-            column(2, uiOutput("qc_box_retention")),
-            column(2, uiOutput("qc_box_median_genes")),
-            column(2, uiOutput("qc_box_median_mt"))
+        tags$div(
+            class = "qc-kpi-row",
+            fluidRow(
+                column(2, uiOutput("qc_box_cells_before")),
+                column(2, uiOutput("qc_box_cells_after")),
+                column(2, uiOutput("qc_box_genes_after")),
+                column(2, uiOutput("qc_box_retention")),
+                column(2, uiOutput("qc_box_median_genes")),
+                column(2, uiOutput("qc_box_median_mt"))
+            )
         ),
 
         fluidRow(
@@ -197,7 +200,7 @@ ui <- page_navbar(
                 card(
                     card_header("Interactive UMAP"),
                     tags$div(class = "umap-square-wrap",
-                             plotlyOutput("umap_plot", height = "580px"))
+                             plotlyOutput("umap_plot", height = "100%"))
                 )
             )
         ),
@@ -244,7 +247,7 @@ ui <- page_navbar(
                 card(
                     card_header("Expression UMAP"),
                     tags$div(class = "umap-square-wrap",
-                             plotlyOutput("gene_expression_umap", height = "580px"))
+                             plotlyOutput("gene_expression_umap", height = "100%"))
                 )
             )
         )
@@ -276,7 +279,7 @@ ui <- page_navbar(
                                  value = 10, min = 0, max = 200, step = 1),
                     sliderInput("dge_gene_label_size", "Label font size:",
                                 min = 2, max = 8, value = 3, step = 0.5),
-                    helpText("Labels balance log2FC extremes and significance equally."),
+                    helpText("Labels prioritize log2FC extremes (both tails) and then significance."),
                     tags$hr(),
                     actionButton("btn_apply_dge", "Apply",
                                  icon = icon("play"), class = "btn-primary w-100"),
@@ -292,7 +295,8 @@ ui <- page_navbar(
                                 column(8,
                                   plotOutput("dge_volcano_plot", height = "600px",
                                              hover = hoverOpts("plot_hover", delay = 100,
-                                                               delayType = "debounce"))
+                                                                                                                             delayType = "debounce",
+                                                                                                                             nullOutside = TRUE))
                                 ),
                                 column(4,
                                   card(
@@ -408,7 +412,7 @@ ui <- page_navbar(
                 card(
                     card_header("Custom Annotation UMAP"),
                     tags$div(class = "umap-square-wrap",
-                             plotlyOutput("annotation_umap", height = "580px")),
+                             plotlyOutput("annotation_umap", height = "100%")),
                     br(),
                     verbatimTextOutput("annotation_stats")
                 )

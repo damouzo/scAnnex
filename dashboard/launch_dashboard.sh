@@ -153,9 +153,14 @@ ENV_FILE="${SCRIPT_DIR}/environment_dashboard.yml"
 CONDA_ENV_DIR="${SCANNEX_DASHBOARD_CONDA_DIR:-}"
 
 if [[ -z "$CONDA_ENV_DIR" ]]; then
-    # Auto-detect: Use default conda location for local environments
-    CONDA_ENV_DIR="$(conda info --base)/envs"
-    print_info "Using default conda environment location: $CONDA_ENV_DIR"
+    if [[ -n "${USER:-}" ]] && [[ -d "/gpfs/scratch/${USER}" ]] && [[ -w "/gpfs/scratch/${USER}" ]]; then
+        CONDA_ENV_DIR="/gpfs/scratch/${USER}/scannex_cache/conda_envs"
+        print_info "Using HPC scratch environment location: $CONDA_ENV_DIR"
+    else
+        # Fallback for local systems without /gpfs/scratch
+        CONDA_ENV_DIR="$(conda info --base)/envs"
+        print_info "Using default conda environment location: $CONDA_ENV_DIR"
+    fi
 else
     print_info "Using custom conda environment location: $CONDA_ENV_DIR"
 fi
@@ -179,7 +184,7 @@ if [[ ! -d "$ENV_PATH" ]]; then
         print_error "Cannot create conda environment directory: $CONDA_ENV_DIR"
         echo ""
         echo "Try setting a different location:"
-        echo "  export SCANNEX_DASHBOARD_CONDA_DIR=~/conda_envs"
+        echo "  export SCANNEX_DASHBOARD_CONDA_DIR=/gpfs/scratch/$USER/scannex_cache/conda_envs"
         echo "  $0 $@"
         exit 1
     }
@@ -193,7 +198,7 @@ if [[ ! -d "$ENV_PATH" ]]; then
         echo "  conda env create -f $ENV_FILE -p $ENV_PATH"
         echo ""
         echo "Or use a different location:"
-        echo "  export SCANNEX_DASHBOARD_CONDA_DIR=~/conda_envs"
+        echo "  export SCANNEX_DASHBOARD_CONDA_DIR=/gpfs/scratch/$USER/scannex_cache/conda_envs"
         exit 1
     }
     

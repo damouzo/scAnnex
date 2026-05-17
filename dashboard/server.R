@@ -629,8 +629,8 @@ server <- function(input, output, session) {
     p <- p %>%
       layout(
         title  = sprintf("UMAP colored by %s", legend_title),
-        xaxis  = list(title = "UMAP 1"),
-        yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1),
+        xaxis  = list(title = "UMAP 1", constrain = "domain"),
+        yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1, constrain = "domain"),
         legend = list(title = list(text = legend_title),
                       x = 1.02, y = 0.5, xanchor = "left", yanchor = "middle",
                       orientation = "v", itemsizing = "constant"),
@@ -750,8 +750,8 @@ server <- function(input, output, session) {
               hoverinfo = "text"
             ) %>% layout(
               title  = sprintf("Expression of %s (top %d cells highlighted)", gene_name, top_n),
-              xaxis  = list(title = "UMAP 1"),
-              yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1),
+              xaxis  = list(title = "UMAP 1", constrain = "domain"),
+              yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1, constrain = "domain"),
               margin = list(r = 60, b = 40),
               hovermode = "closest"
             ) %>% config(responsive = TRUE)
@@ -772,10 +772,12 @@ server <- function(input, output, session) {
               text     = ~paste("Cell:", cell_id, "<br>Expression:", round(expression, 2)),
               hoverinfo = "text"
             ) %>% layout(
-              title = sprintf("Expression of %s", gene_name),
-              xaxis = list(title = "UMAP 1"), yaxis = list(title = "UMAP 2"),
+              title  = sprintf("Expression of %s", gene_name),
+              xaxis  = list(title = "UMAP 1", constrain = "domain"),
+              yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1, constrain = "domain"),
+              margin = list(r = 80, b = 40),
               hovermode = "closest"
-            )
+            ) %>% config(responsive = TRUE)
           }
 
           return(p)
@@ -821,8 +823,8 @@ server <- function(input, output, session) {
           ) %>%
             layout(
               title  = sprintf("Gene Set Score (%d genes)", length(gene_list)),
-              xaxis  = list(title = "UMAP 1"),
-              yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1),
+              xaxis  = list(title = "UMAP 1", constrain = "domain"),
+              yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1, constrain = "domain"),
               margin = list(r = 80, b = 40),
               hovermode = 'closest'
             ) %>% config(responsive = TRUE)
@@ -951,8 +953,86 @@ server <- function(input, output, session) {
     if (!all(required_cols %in% names(dge_df))) return(NULL)
     dge_df %>%
       filter(!is.na(log2_fc), !is.na(pvalue_adj), pvalue_adj > 0) %>%
-      mutate(neg_log10_padj = -log10(pvalue_adj))
+      mutate(
+        neg_log10_padj = -log10(pvalue_adj),
+        significant = abs(log2_fc) >= input$dge_logfc_threshold & pvalue_adj < input$dge_pval_threshold,
+        direction = ifelse(
+          abs(log2_fc) >= input$dge_logfc_threshold & pvalue_adj < input$dge_pval_threshold,
+          ifelse(log2_fc > 0, "Upregulated", "Downregulated"),
+          "Not Significant"
+        )
+      )
   })
+
+  select_dge_label_genes <- function(dge_df, top_n) {
+    if (is.null(dge_df) || nrow(dge_df) == 0 || is.null(top_n) || top_n <= 0) {
+      return(dge_df[0, , drop = FALSE])
+    }
+
+    sig_df <- dge_df %>% filter(significant)
+    if (nrow(sig_df) == 0) {
+      return(sig_df)
+    }
+
+    top_n <- min(as.integer(top_n), nrow(sig_df))
+
+    if (!"gene" %in% names(sig_df)) {
+      return(
+        sig_df %>%
+          arrange(desc(abs(log2_fc)), pvalue_adj) %>%
+          head(top_n)
+      )
+    }
+
+    sig_df <- sig_df %>%
+      mutate(
+        .gene_key = ifelse(
+          !is.na(gene) & nzchar(as.character(gene)),
+          as.character(gene),
+          paste0("row_", row_number())
+        )
+      )
+
+    # Reserve label slots for both LFC tails so positive/negative extremes are visible.
+    side_quota <- min(max(1L, floor(top_n * 0.35)), top_n)
+
+    up_extreme <- sig_df %>%
+      filter(log2_fc > 0) %>%
+      arrange(desc(log2_fc), pvalue_adj) %>%
+      head(side_quota)
+
+    down_extreme <- sig_df %>%
+      filter(log2_fc < 0) %>%
+      arrange(log2_fc, pvalue_adj) %>%
+      head(side_quota)
+
+    extreme_genes <- bind_rows(up_extreme, down_extreme) %>%
+      distinct(.gene_key, .keep_all = TRUE)
+
+    max_lfc <- max(abs(sig_df$log2_fc), na.rm = TRUE)
+    max_nlp <- max(sig_df$neg_log10_padj, na.rm = TRUE)
+
+    ranked_genes <- sig_df %>%
+      mutate(
+        score_lfc = abs(log2_fc) / pmax(max_lfc, 1e-9),
+        score_padj = neg_log10_padj / pmax(max_nlp, 1e-9),
+        score = 0.7 * score_lfc + 0.3 * score_padj
+      ) %>%
+      arrange(desc(score), pvalue_adj)
+
+    remaining_n <- max(top_n - nrow(extreme_genes), 0L)
+    remaining_genes <- if (remaining_n > 0) {
+      ranked_genes %>%
+        filter(!(.gene_key %in% extreme_genes$.gene_key)) %>%
+        head(remaining_n)
+    } else {
+      ranked_genes[0, , drop = FALSE]
+    }
+
+    bind_rows(extreme_genes, remaining_genes) %>%
+      distinct(.gene_key, .keep_all = TRUE) %>%
+      head(top_n)
+  }
 
   # Volcano plot
   output$dge_volcano_plot <- renderPlot({
@@ -960,18 +1040,6 @@ server <- function(input, output, session) {
     if (is.null(dge_df)) {
       plot.new(); text(0.5, 0.5, "No data available for this contrast", cex = 1.5); return()
     }
-    
-    # Add significance column
-    dge_df$significant <- with(dge_df, 
-      abs(log2_fc) >= input$dge_logfc_threshold & 
-      pvalue_adj < input$dge_pval_threshold
-    )
-    
-    # Add direction column for coloring
-    dge_df$direction <- ifelse(
-      !dge_df$significant, "Not Significant",
-      ifelse(dge_df$log2_fc > 0, "Upregulated", "Downregulated")
-    )
     
     # Create volcano plot
     p <- ggplot(dge_df, aes(x = log2_fc, y = neg_log10_padj)) +
@@ -996,35 +1064,23 @@ server <- function(input, output, session) {
       theme_minimal(base_size = 14) +
       theme(
         legend.position = "bottom",
-        plot.title      = element_text(hjust = 0.5, face = "bold"),
-        aspect.ratio    = 1
+        plot.title      = element_text(hjust = 0.5, face = "bold")
       )
     
-    # Add gene labels using combined LFC + significance score
+    # Add gene labels with guaranteed LFC-tail coverage plus weighted ranking.
     if (input$dge_top_n_genes > 0) {
-      sig_df <- dge_df %>% filter(significant)
-      if (nrow(sig_df) > 0) {
-        max_lfc <- max(abs(sig_df$log2_fc), na.rm = TRUE)
-        max_nlp <- max(-log10(sig_df$pvalue_adj), na.rm = TRUE)
-        top_genes <- sig_df %>%
-          mutate(score = sqrt(
-            (abs(log2_fc) / pmax(max_lfc, 1e-9))^2 +
-            (-log10(pvalue_adj) / pmax(max_nlp, 1e-9))^2
-          )) %>%
-          arrange(desc(score)) %>%
-          head(input$dge_top_n_genes)
+      top_genes <- select_dge_label_genes(dge_df, input$dge_top_n_genes)
 
-        if (nrow(top_genes) > 0) {
-          p <- p +
-            ggrepel::geom_text_repel(
-              data  = top_genes,
-              aes(label = gene),
-              size  = input$dge_gene_label_size,
-              max.overlaps  = 25,
-              box.padding   = 0.5,
-              point.padding = 0.3
-            )
-        }
+      if (nrow(top_genes) > 0) {
+        p <- p +
+          ggrepel::geom_text_repel(
+            data  = top_genes,
+            aes(label = gene),
+            size  = input$dge_gene_label_size,
+            max.overlaps  = 25,
+            box.padding   = 0.5,
+            point.padding = 0.3
+          )
       }
     }
 
@@ -1044,13 +1100,25 @@ server <- function(input, output, session) {
       ))
     }
 
-    pt <- nearPoints(dge_df, hover,
-                     xvar = "log2_fc", yvar = "neg_log10_padj",
-                     maxpoints = 1, threshold = 20)
-    if (nrow(pt) == 0) {
+    if (is.null(hover$x) || is.null(hover$y) || !is.finite(hover$x) || !is.finite(hover$y)) {
       return(tags$p(class = "text-muted small", style = "padding: 8px;", "No gene at cursor."))
     }
-    g <- pt[1, ]
+
+    hover_gene <- nearPoints(
+      dge_df,
+      hover,
+      xvar = "log2_fc",
+      yvar = "neg_log10_padj",
+      threshold = 6,
+      maxpoints = 1,
+      addDist = FALSE
+    )
+
+    if (nrow(hover_gene) == 0) {
+      return(tags$p(class = "text-muted small", style = "padding: 8px;", "No gene at cursor."))
+    }
+
+    g <- hover_gene[1, , drop = FALSE]
     direction <- if (!is.na(g$significant) && isTRUE(g$significant)) {
       if (g$log2_fc > 0) "Upregulated" else "Downregulated"
     } else "Not Significant"
@@ -1211,33 +1279,21 @@ server <- function(input, output, session) {
         theme_minimal(base_size = 14) +
         theme(
           legend.position = "bottom",
-          plot.title      = element_text(hjust = 0.5, face = "bold"),
-          aspect.ratio    = 1
+          plot.title      = element_text(hjust = 0.5, face = "bold")
         )
       
-      # Add gene labels using combined LFC + significance score
+      # Add gene labels with guaranteed LFC-tail coverage plus weighted ranking.
       if (input$dge_top_n_genes > 0) {
-        sig_df <- dge_df %>% filter(significant)
-        if (nrow(sig_df) > 0) {
-          max_lfc <- max(abs(sig_df$log2_fc), na.rm = TRUE)
-          max_nlp <- max(-log10(sig_df$pvalue_adj), na.rm = TRUE)
-          top_genes <- sig_df %>%
-            mutate(score = sqrt(
-              (abs(log2_fc) / pmax(max_lfc, 1e-9))^2 +
-              (-log10(pvalue_adj) / pmax(max_nlp, 1e-9))^2
-            )) %>%
-            arrange(desc(score)) %>%
-            head(input$dge_top_n_genes)
+        top_genes <- select_dge_label_genes(dge_df, input$dge_top_n_genes)
 
-          if (nrow(top_genes) > 0) {
-            p <- p +
-              ggrepel::geom_text_repel(
-                data  = top_genes,
-                aes(label = gene),
-                size  = input$dge_gene_label_size,
-                max.overlaps = 25
-              )
-          }
+        if (nrow(top_genes) > 0) {
+          p <- p +
+            ggrepel::geom_text_repel(
+              data  = top_genes,
+              aes(label = gene),
+              size  = input$dge_gene_label_size,
+              max.overlaps = 25
+            )
         }
       }
       
@@ -1739,8 +1795,8 @@ server <- function(input, output, session) {
     ) %>%
       layout(
         title  = plot_title,
-        xaxis  = list(title = "UMAP 1"),
-        yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1),
+        xaxis  = list(title = "UMAP 1", constrain = "domain"),
+        yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1, constrain = "domain"),
         legend = list(x = 1.02, y = 0.5, xanchor = "left", yanchor = "middle",
                       orientation = "v", itemsizing = "constant"),
         margin    = list(r = 160, b = 40),

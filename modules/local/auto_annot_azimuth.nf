@@ -19,8 +19,14 @@ process AUTO_ANNOT_AZIMUTH {
     script:
     def args = task.ext.args ?: ''
     def refs = params.azimuth_refs ?: 'pbmcref'
+    def azimuth_r_lib_dir = params.azimuth_r_lib_dir ?: ''
     def continue_on_error = params.auto_annot_continue_on_error ? '--continue-on-error' : ''
     """
+    if [[ -n "${azimuth_r_lib_dir}" ]]; then
+        mkdir -p "${azimuth_r_lib_dir}"
+        export SCANNEX_R_LIBS_DIR="${azimuth_r_lib_dir}"
+    fi
+
     Rscript ${projectDir}/bin/auto_annot_azimuth.R \
         --input ${rds} \
         --output azimuth_annotations.csv \

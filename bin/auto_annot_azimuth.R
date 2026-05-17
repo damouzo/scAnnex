@@ -2,8 +2,34 @@
 
 # In read-only containers, SeuratData needs a writable location to install
 # reference data packages. Set this up before loading any libraries.
-local_lib <- file.path(Sys.getenv("HOME", tempdir()), ".scannex_R_libs")
-dir.create(local_lib, recursive = TRUE, showWarnings = FALSE)
+get_local_lib_path <- function() {
+    from_env <- Sys.getenv("SCANNEX_R_LIBS_DIR", "")
+    if (nzchar(from_env)) {
+        return(from_env)
+    }
+
+    user <- Sys.getenv("USER", "")
+    if (nzchar(user)) {
+        scratch_user_dir <- file.path("/gpfs/scratch", user)
+        if (dir.exists(scratch_user_dir)) {
+            return(file.path(scratch_user_dir, "scannex_cache", "R", "libs"))
+        }
+    }
+
+    home_dir <- Sys.getenv("HOME", "")
+    if (nzchar(home_dir)) {
+        return(file.path(home_dir, ".scannex_R_libs"))
+    }
+
+    file.path(tempdir(), "scannex_R_libs")
+}
+
+local_lib <- get_local_lib_path()
+ok <- dir.create(local_lib, recursive = TRUE, showWarnings = FALSE)
+if (!ok && !dir.exists(local_lib)) {
+    local_lib <- file.path(tempdir(), "scannex_R_libs")
+    dir.create(local_lib, recursive = TRUE, showWarnings = FALSE)
+}
 .libPaths(c(local_lib, .libPaths()))
 
 suppressPackageStartupMessages({

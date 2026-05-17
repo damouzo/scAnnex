@@ -167,8 +167,36 @@ body {
 
 /* ── Square UMAP container ──────────────────────────────────────────────── */
 .umap-square-wrap {
-    width: 100%;
-    min-height: 580px;
+    width: min(100%, 700px);
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+}
+
+.umap-square-wrap > .html-widget-output,
+.umap-square-wrap > .plotly {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* ── QC by Sample KPIs: same visual width feel as Overview cards ───────── */
+.qc-kpi-row .bslib-value-box {
+    width: 88%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.qc-kpi-row .bslib-value-box .value-box-title {
+    font-size: 0.80rem;
+}
+
+.qc-kpi-row .bslib-value-box .value-box-value {
+    font-size: 1.25rem;
+}
+
+@media (max-width: 992px) {
+    .umap-square-wrap {
+        width: 100%;
+    }
 }
 
 /* ── DGE hover gene info panel ──────────────────────────────────────────── */

@@ -216,7 +216,8 @@ echo ""
 #   1) SCANNEX_DASHBOARD_SIF env var  — explicit path to a local .sif file
 #   2) Shared Singularity cache on HPC scratch (/gpfs/scratch/$USER/singularity_cache)
 #   3) SINGULARITY_CACHEDIR env var (if set)
-#   4) ~/.singularity/ (local fallback)
+#   4) /gpfs/scratch/$USER/scannex_cache/singularity (scratch fallback)
+#   5) ~/.singularity/ (local fallback)
 
 DASHBOARD_IMAGE="docker://damouzo/scannex-dashboard:1.0.0"
 SIF_FILENAME="scannex-dashboard-1.0.0.sif"
@@ -228,6 +229,8 @@ elif [[ -d "/gpfs/scratch/${USER}/singularity_cache" ]]; then
     SIF_PATH="/gpfs/scratch/${USER}/singularity_cache/${SIF_FILENAME}"
 elif [[ -n "${SINGULARITY_CACHEDIR:-}" ]]; then
     SIF_PATH="${SINGULARITY_CACHEDIR}/${SIF_FILENAME}"
+elif [[ -d "/gpfs/scratch/${USER}" ]]; then
+    SIF_PATH="/gpfs/scratch/${USER}/scannex_cache/singularity/${SIF_FILENAME}"
 else
     SIF_PATH="${HOME}/.singularity/${SIF_FILENAME}"
 fi
