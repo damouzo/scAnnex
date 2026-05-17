@@ -1034,6 +1034,92 @@ server <- function(input, output, session) {
       head(top_n)
   }
 
+  parse_dge_gene_names <- function(gene_text) {
+    if (is.null(gene_text)) {
+      return(character(0))
+    }
+
+    genes <- unlist(strsplit(gene_text, "[,;\\s]+"), use.names = FALSE)
+    genes <- trimws(genes)
+    genes <- genes[nzchar(genes)]
+    unique(genes)
+  }
+
+  get_dge_highlight_genes <- function(dge_df, gene_text) {
+    if (is.null(dge_df) || nrow(dge_df) == 0 || !"gene" %in% names(dge_df)) {
+      return(dge_df[0, , drop = FALSE])
+    }
+
+    query_genes <- parse_dge_gene_names(gene_text)
+    if (length(query_genes) == 0) {
+      return(dge_df[0, , drop = FALSE])
+    }
+
+    base_df <- dge_df %>%
+      mutate(.gene_chr = as.character(gene)) %>%
+      filter(!is.na(.gene_chr), nzchar(.gene_chr)) %>%
+      mutate(.gene_upper = toupper(.gene_chr))
+
+    query_tbl <- data.frame(
+      .query_gene = query_genes,
+      .query_upper = toupper(query_genes),
+      stringsAsFactors = FALSE
+    ) %>%
+      distinct(.query_upper, .keep_all = TRUE)
+
+    matched <- base_df %>%
+      inner_join(query_tbl, by = c(".gene_upper" = ".query_upper"))
+
+    if (nrow(matched) == 0) {
+      return(matched)
+    }
+
+    matched <- matched %>% mutate(.query_order = match(.query_gene, query_genes))
+
+    if ("pvalue_adj" %in% names(matched)) {
+      matched <- matched %>% arrange(.query_order, pvalue_adj)
+    } else {
+      matched <- matched %>% arrange(.query_order)
+    }
+
+    matched %>%
+      distinct(.query_gene, .keep_all = TRUE) %>%
+      select(-.query_order)
+  }
+
+  add_dge_highlight_layers <- function(p, dge_df, label_size) {
+    highlighted_genes <- get_dge_highlight_genes(dge_df, input$dge_gene_names)
+    if (nrow(highlighted_genes) == 0) {
+      return(p)
+    }
+
+    p +
+      geom_point(
+        data = highlighted_genes,
+        aes(x = log2_fc, y = neg_log10_padj),
+        inherit.aes = FALSE,
+        shape = 21,
+        fill = "#ffd54f",
+        color = "#111111",
+        stroke = 0.7,
+        size = 2.9,
+        alpha = 0.98
+      ) +
+      ggrepel::geom_text_repel(
+        data = highlighted_genes,
+        aes(x = log2_fc, y = neg_log10_padj, label = .query_gene),
+        inherit.aes = FALSE,
+        size = max(label_size + 0.5, 3.2),
+        max.overlaps = Inf,
+        box.padding = 0.45,
+        point.padding = 0.35,
+        segment.color = "gray35",
+        min.segment.length = 0,
+        fontface = "bold",
+        color = "#111111"
+      )
+  }
+
   # Volcano plot
   output$dge_volcano_plot <- renderPlot({
     dge_df <- dge_plot_data()
@@ -1084,71 +1170,48 @@ server <- function(input, output, session) {
       }
     }
 
+    p <- add_dge_highlight_layers(p, dge_df, input$dge_gene_label_size)
+
     print(p)
   })
 
-  # DGE hover info panel (gene details when hovering over volcano)
-  output$dge_hover_info <- renderUI({
+  # DGE gene-name panel (typed gene list to highlight on volcano)
+  output$dge_gene_name_status <- renderUI({
     dge_df <- dge_plot_data()
-    if (is.null(dge_df)) return(tags$p(class = "text-muted", "Load DGE results first."))
-
-    hover <- input$plot_hover
-    if (is.null(hover)) {
-      return(tags$div(
-        style = "padding: 12px;",
-        icon("arrow-pointer"), tags$span(class = "text-muted ms-1", "Hover over a gene to see details.")
-      ))
+    if (is.null(dge_df)) {
+      return(tags$p(class = "text-muted small", style = "padding: 8px;", "Load DGE results first."))
     }
 
-    if (is.null(hover$x) || is.null(hover$y) || !is.finite(hover$x) || !is.finite(hover$y)) {
-      return(tags$p(class = "text-muted small", style = "padding: 8px;", "No gene at cursor."))
+    if (!"gene" %in% names(dge_df)) {
+      return(tags$p(class = "text-muted small", style = "padding: 8px;", "This contrast has no gene column."))
     }
 
-    hover_gene <- nearPoints(
-      dge_df,
-      hover,
-      xvar = "log2_fc",
-      yvar = "neg_log10_padj",
-      threshold = 6,
-      maxpoints = 1,
-      addDist = FALSE
-    )
-
-    if (nrow(hover_gene) == 0) {
-      return(tags$p(class = "text-muted small", style = "padding: 8px;", "No gene at cursor."))
+    query_genes <- parse_dge_gene_names(input$dge_gene_names)
+    if (length(query_genes) == 0) {
+      return(tags$p(class = "text-muted small", style = "padding: 8px;", "Write one or more gene names to highlight."))
     }
 
-    g <- hover_gene[1, , drop = FALSE]
-    direction <- if (!is.na(g$significant) && isTRUE(g$significant)) {
-      if (g$log2_fc > 0) "Upregulated" else "Downregulated"
-    } else "Not Significant"
-    dir_color <- switch(direction,
-      Upregulated   = "#d62728",
-      Downregulated = "#1f77b4",
-      "#555"
-    )
+    highlighted <- get_dge_highlight_genes(dge_df, input$dge_gene_names)
+    found_genes <- if (nrow(highlighted) > 0) as.character(highlighted$.query_gene) else character(0)
+    missing_genes <- setdiff(query_genes, found_genes)
+
     tags$div(
-      class = "hover-gene-info",
+      style = "padding: 10px;",
       tags$div(
-        style = paste0("font-weight:700; font-size:1.05rem; color:", dir_color, "; margin-bottom:10px;"),
-        if (!is.null(g$gene)) g$gene else "Gene"
+        style = "font-weight: 600; margin-bottom: 8px;",
+        sprintf("Found: %d / %d", length(found_genes), length(query_genes))
       ),
-      tags$table(
-        class = "table table-sm table-bordered hover-gene-table",
-        tags$tbody(
-          tags$tr(tags$th("Metric"), tags$th("Value")),
-          tags$tr(tags$td("Log2 FC"),      tags$td(round(g$log2_fc, 3))),
-          tags$tr(tags$td("-log10 padj"),  tags$td(round(g$neg_log10_padj, 2))),
-          tags$tr(tags$td("p-value"),      tags$td(if (!is.null(g$pvalue))     format(g$pvalue,     scientific = TRUE, digits = 3) else "—")),
-          tags$tr(tags$td("Adj. p-value"), tags$td(format(g$pvalue_adj, scientific = TRUE, digits = 3))),
-          if (!is.null(g$mean_expr_group1) && !is.na(g$mean_expr_group1))
-            tags$tr(tags$td("Mean group 1"), tags$td(round(g$mean_expr_group1, 3))),
-          if (!is.null(g$mean_expr_group2) && !is.na(g$mean_expr_group2))
-            tags$tr(tags$td("Mean group 2"), tags$td(round(g$mean_expr_group2, 3))),
-          tags$tr(tags$td("Direction"),
-            tags$td(tags$span(style = paste0("color:", dir_color, "; font-weight:600;"), direction)))
+      if (length(found_genes) > 0)
+        tags$div(
+          class = "small",
+          style = "margin-bottom: 6px;",
+          paste0("Matched: ", paste(found_genes, collapse = ", "))
+        ),
+      if (length(missing_genes) > 0)
+        tags$div(
+          class = "small text-muted",
+          paste0("Not found: ", paste(missing_genes, collapse = ", "))
         )
-      )
     )
   })
   
@@ -1242,7 +1305,8 @@ server <- function(input, output, session) {
       }
 
       dge_df <- dge_df %>%
-        filter(!is.na(log2_fc), !is.na(pvalue_adj), pvalue_adj > 0)
+        filter(!is.na(log2_fc), !is.na(pvalue_adj), pvalue_adj > 0) %>%
+        mutate(neg_log10_padj = -log10(pvalue_adj))
       
       # Add significance column
       dge_df$significant <- with(dge_df, 
@@ -1257,7 +1321,7 @@ server <- function(input, output, session) {
       )
       
       # Create plot
-      p <- ggplot(dge_df, aes(x = log2_fc, y = -log10(pvalue_adj))) +
+      p <- ggplot(dge_df, aes(x = log2_fc, y = neg_log10_padj)) +
         geom_point(aes(color = direction), alpha = 0.6, size = 2) +
         scale_color_manual(
           values = c(
@@ -1296,6 +1360,8 @@ server <- function(input, output, session) {
             )
         }
       }
+
+      p <- add_dge_highlight_layers(p, dge_df, input$dge_gene_label_size)
       
       # Save to file
       ggsave(file, plot = p, width = 8, height = 8, dpi = 300)

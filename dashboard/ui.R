@@ -293,15 +293,20 @@ ui <- page_navbar(
                     nav_panel("Volcano Plot",
                               fluidRow(
                                 column(8,
-                                  plotOutput("dge_volcano_plot", height = "600px",
-                                             hover = hoverOpts("plot_hover", delay = 100,
-                                                                                                                             delayType = "debounce",
-                                                                                                                             nullOutside = TRUE))
+                                                                    plotOutput("dge_volcano_plot", height = "600px")
                                 ),
                                 column(4,
                                   card(
-                                    card_header("Gene Details"),
-                                    uiOutput("dge_hover_info")
+                                                                        card_header("Gene Names"),
+                                                                        textAreaInput(
+                                                                            "dge_gene_names",
+                                                                            "Highlight genes (comma, space or newline):",
+                                                                            value = "",
+                                                                            rows = 7,
+                                                                            placeholder = "CRISP3, LTF, CX3CR1"
+                                                                        ),
+                                                                        helpText("Matching genes are highlighted and labeled on the volcano plot."),
+                                                                        uiOutput("dge_gene_name_status")
                                   )
                                 )
                               )
