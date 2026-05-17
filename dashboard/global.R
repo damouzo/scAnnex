@@ -161,9 +161,21 @@ obs_dict['cell_id'] = adata.obs_names.tolist()
     
     # For backed mode, load UMAP separately since .obsm is not accessible
     if (backed) {
-      message("  Backed mode detected - loading UMAP from separate read...")
-      adata_temp <- ad$read_h5ad(h5ad_path, backed = NULL)
-      umap_matrix <- py_to_r(adata_temp$obsm["X_umap"])
+      message("  Backed mode detected - trying direct UMAP access...")
+      umap_matrix <- tryCatch(
+        py_to_r(adata$obsm["X_umap"]),
+        error = function(e) NULL
+      )
+
+      if (is.null(umap_matrix)) {
+        message("  Direct UMAP access unavailable - fallback to one-time full read...")
+        adata_temp <- ad$read_h5ad(h5ad_path, backed = NULL)
+        umap_matrix <- py_to_r(adata_temp$obsm["X_umap"])
+
+        # Release temporary full object as soon as possible.
+        rm(adata_temp)
+        py_run_string("import gc; gc.collect()")
+      }
     } else {
       # Direct access for in-memory
       umap_matrix <- py_to_r(adata$obsm["X_umap"])
@@ -233,6 +245,38 @@ var_dict['gene_id'] = adata.var_names.tolist()
 #' @param data_obj Data object from load_h5ad_data()
 #' @param gene_name Gene name to extract
 #' @return Numeric vector of expression values
+extract_gene_expression_vector <- function(adata, gene_idx) {
+  slice <- adata$X[, as.integer(gene_idx)]
+
+  expr <- tryCatch({
+    if (reticulate::py_has_attr(slice, "toarray")) {
+      py_to_r(slice$toarray())
+    } else if (reticulate::py_has_attr(slice, "A1")) {
+      py_to_r(slice$A1)
+    } else {
+      py_to_r(slice)
+    }
+  }, error = function(e) {
+    py_to_r(slice)
+  })
+
+  if (is.null(expr)) {
+    stop("Unable to extract expression values from AnnData matrix")
+  }
+
+  if (is.data.frame(expr)) {
+    expr <- as.matrix(expr)
+  }
+  if (is.matrix(expr) || is.array(expr)) {
+    expr <- as.vector(expr)
+  }
+  if (is.list(expr)) {
+    expr <- unlist(expr, use.names = FALSE)
+  }
+
+  as.numeric(expr)
+}
+
 get_gene_expression <- function(data_obj, gene_name) {
   
   adata <- data_obj$adata
@@ -245,12 +289,8 @@ get_gene_expression <- function(data_obj, gene_name) {
   # Get gene index
   gene_idx <- which(rownames(data_obj$var_info) == gene_name) - 1  # Python 0-indexed
   
-  # Extract expression (handles both backed and in-memory)
-  if (data_obj$backed) {
-    expr <- py_to_r(adata$X[, as.integer(gene_idx)]$toarray()$flatten())
-  } else {
-    expr <- py_to_r(adata$X[, as.integer(gene_idx)])
-  }
+  # Extract expression robustly for both sparse and dense slices.
+  expr <- extract_gene_expression_vector(adata, gene_idx)
   
   names(expr) <- data_obj$metadata$cell_id
   return(expr)
@@ -611,16 +651,7 @@ calculate_gene_set_score <- function(data_obj, gene_list) {
   
   for (gene in found_genes) {
     gene_idx <- which(rownames(data_obj$var_info) == gene) - 1  # Python 0-indexed
-    
-    # Extract expression (handles both backed and in-memory)
-    if (data_obj$backed) {
-      expr <- py_to_r(adata$X[, as.integer(gene_idx)]$toarray()$flatten())
-    } else {
-      expr <- py_to_r(adata$X[, as.integer(gene_idx)])
-      if (is.matrix(expr)) {
-        expr <- as.vector(expr)
-      }
-    }
+    expr <- extract_gene_expression_vector(adata, gene_idx)
     
     gene_expr_list[[gene]] <- expr
   }

@@ -66,7 +66,7 @@ server <- function(input, output, session) {
       if (nzchar(DEFAULT_MERGED_H5AD) && file.exists(DEFAULT_MERGED_H5AD)) {
         tryCatch({
           incProgress(0.4, detail = "Loading H5AD (this may take a moment)")
-          rv$data_obj <- load_h5ad_data(DEFAULT_MERGED_H5AD, backed = FALSE)
+          rv$data_obj <- load_h5ad_data(DEFAULT_MERGED_H5AD, backed = TRUE)
           rv$h5ad_path <- DEFAULT_MERGED_H5AD
 
           rv$umap_color_choices <- setdiff(names(rv$data_obj$metadata), "cell_id")
@@ -802,32 +802,70 @@ server <- function(input, output, session) {
           # Merge with UMAP coords
           umap_data <- rv$data_obj$umap_coords
           umap_data$score <- score[umap_data$cell_id]
+          top_n <- as.integer(input$gene_top_n_cells %||% 0)
           
-          # Create plot
-          p <- plot_ly(
-            data = umap_data,
-            x = ~UMAP_1,
-            y = ~UMAP_2,
-            type = 'scattergl',
-            mode = 'markers',
-            marker = list(
-              size = 3,
-              opacity = 0.7,
-              color = ~score,
-              colorscale = 'Viridis',
-              showscale = TRUE,
-              colorbar = list(title = "Gene Set Score")
-            ),
-            text = ~paste("Cell:", cell_id, "<br>Score:", round(score, 3)),
-            hoverinfo = 'text'
-          ) %>%
-            layout(
-              title  = sprintf("Gene Set Score (%d genes)", length(gene_list)),
-              xaxis  = list(title = "UMAP 1", constrain = "domain"),
-              yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1, constrain = "domain"),
-              margin = list(r = 80, b = 40),
-              hovermode = 'closest'
-            ) %>% config(responsive = TRUE)
+          if (top_n > 0) {
+            valid_scores <- umap_data$score[!is.na(umap_data$score)]
+            if (length(valid_scores) == 0) {
+              stop("Gene set score is empty for all cells")
+            }
+
+            thresh <- sort(valid_scores, decreasing = TRUE)[min(top_n, length(valid_scores))]
+            umap_data$is_top <- !is.na(umap_data$score) & umap_data$score >= thresh
+            umap_data <- umap_data[order(umap_data$is_top), ]
+
+            p <- plot_ly(
+              data   = umap_data,
+              x      = ~UMAP_1,
+              y      = ~UMAP_2,
+              type   = "scattergl",
+              mode   = "markers",
+              marker = list(
+                size    = input$umap_point_size %||% 3,
+                opacity = input$umap_opacity    %||% 0.7,
+                color   = ifelse(umap_data$is_top, "red", "lightgray")
+              ),
+              text = ~paste0(
+                "Cell: ", cell_id,
+                "<br>Score: ", round(score, 3),
+                "<br>Top ", top_n, ": ", ifelse(is_top, "yes", "no")
+              ),
+              hoverinfo = "text"
+            ) %>%
+              layout(
+                title  = sprintf("Gene Set Score (%d genes, top %d cells highlighted)", length(gene_list), top_n),
+                xaxis  = list(title = "UMAP 1", constrain = "domain"),
+                yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1, constrain = "domain"),
+                margin = list(r = 80, b = 40),
+                hovermode = "closest"
+              ) %>% config(responsive = TRUE)
+          } else {
+            # Create plot (normal gradient mode)
+            p <- plot_ly(
+              data = umap_data,
+              x = ~UMAP_1,
+              y = ~UMAP_2,
+              type = "scattergl",
+              mode = "markers",
+              marker = list(
+                size = input$umap_point_size %||% 3,
+                opacity = input$umap_opacity %||% 0.7,
+                color = ~score,
+                colorscale = "Viridis",
+                showscale = TRUE,
+                colorbar = list(title = "Gene Set Score")
+              ),
+              text = ~paste("Cell:", cell_id, "<br>Score:", round(score, 3)),
+              hoverinfo = "text"
+            ) %>%
+              layout(
+                title  = sprintf("Gene Set Score (%d genes)", length(gene_list)),
+                xaxis  = list(title = "UMAP 1", constrain = "domain"),
+                yaxis  = list(title = "UMAP 2", scaleanchor = "x", scaleratio = 1, constrain = "domain"),
+                margin = list(r = 80, b = 40),
+                hovermode = "closest"
+              ) %>% config(responsive = TRUE)
+          }
           
           showNotification(
             sprintf("Gene set score calculated for %d genes", length(gene_list)),
@@ -1986,7 +2024,7 @@ server <- function(input, output, session) {
             
             rv$data_obj <- load_h5ad_data(
               rv$h5ad_path,
-              backed = FALSE
+              backed = TRUE
             )
             
             # Update color choices
