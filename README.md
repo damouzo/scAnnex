@@ -32,7 +32,7 @@ From raw counts to insights.
 
 ## Demo
 
-![scAnnex dashboard demo](docs/images/Video_demo.mp4)
+https://github.com/user-attachments/assets/efc17522-02e6-4dfd-bdc3-dce66842a65b
 
 
 
@@ -164,21 +164,15 @@ Explore your data in real time. No coding required.
 - Identify filtering thresholds
 - Track cell attrition
 
-![QC Overview](docs/images/QC_overview.png)
-
 **Clustering & UMAP**
 - Interactive scatter plots with WebGL
 - Color by any metadata or clustering
 - Zoom, pan, export
 
-![Clustering](docs/images/Clustering.png)
-
 **Gene Expression**
 - Search any gene
 - Overlay expression on UMAP
 - See distribution instantly
-
-![Gene Expression](docs/images/Gene_Expression.png)
 
 **Annotation Station**
 - Define cell types with simple rules
@@ -186,29 +180,19 @@ Explore your data in real time. No coding required.
 - Preview changes in real time
 - Save annotations directly to H5AD
 
-![Annotation Station](docs/images/Annotation_Station.png)
-
 ---
 
 ## Examples
 
-### Basic Analysis
+### Demo: 6-sample IFN-beta stimulation (PBMC)
 
-Process a single sample with default QC:
-
-```bash
-nextflow run main.nf \
-  -profile wave \
-  --input samplesheet.csv \
-  --outdir results \
-  --max_memory '8.GB'
-```
-
-### Multi-sample with Batch Correction
-
-Integrate multiple samples with Harmony:
+Synthetic dataset: 3 Control + 3 Treatment samples, batch-corrected with Harmony, DGE and GSEA included.
 
 ```bash
+# Generate synthetic H5AD files
+python data_demo/generate_demo.py
+
+# Run full pipeline
 nextflow run main.nf \
   -profile conda \
   --input data_demo/samplesheet.csv \
@@ -219,28 +203,11 @@ nextflow run main.nf \
   --dge_groupby condition \
   --dge_reference Control \
   --run_gsea true \
-  --organism human
-```
+  --organism human \
+  --max_memory '8.GB'
 
-### HPC Execution
-
-Run on SLURM cluster with Singularity:
-
-```bash
-# Generic SLURM cluster
-nextflow run main.nf \
-  -profile slurm,singularity \
-  --input samplesheet.csv \
-  --outdir results \
-  --max_memory '120.GB' \
-  --slurm_queue normal \
-  --slurm_account myproject
-
-# QMUL Apocrita cluster (work-dir automatically set to scratch)
-nextflow run main.nf \
-  -profile apocrita,singularity \
-  --input /gpfs/scratch/$USER/data/samplesheet.csv \
-  --outdir /data/home/$USER/scannex_results  
+# Launch dashboard
+cd dashboard && bash launch_dashboard.sh
 ```
 
 ---
