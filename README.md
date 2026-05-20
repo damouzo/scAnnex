@@ -32,7 +32,7 @@ From raw counts to insights.
 
 ## Demo
 
-https://github.com/user-attachments/assets/efc17522-02e6-4dfd-bdc3-dce66842a65b
+https://github.com/user-attachments/assets/7465ba9e-d781-47de-9917-c4f73c89f8a8
 
 
 
