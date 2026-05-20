@@ -1,2 +1,0 @@
-sample_id,file_type,file_path,batch,condition
-PBMC_1k,rds,data_demo/RDS/pbmc_1k.rds,batch1,control

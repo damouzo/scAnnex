@@ -32,9 +32,7 @@ From raw counts to insights.
 
 ## Demo
 
-*Complete walkthrough: QC metrics, clustering, gene expression, and custom annotations.*
-
-**<a href="https://github.com/damouzo/scAnnex/releases/tag/v0.2.0" target="_blank">▶️ Watch Demo Video</a>**
+![scAnnex dashboard demo](docs/images/Video_demo.mp4)
 
 
 
@@ -60,12 +58,16 @@ scAnnex automates the complete workflow for single-cell RNA-seq analysis:
 
 ### Test with Demo Data
 
-```bash
-# 10x MTX format with Singularity (recommended for HPC)
-nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results -profile singularity
+First, generate the synthetic H5AD files:
 
-# Or with conda (works everywhere)
-nextflow run main.nf --input data_demo/10xMTX/samplesheet.csv --outdir results -profile conda
+```bash
+python data_demo/generate_demo.py
+```
+
+Then run the pipeline:
+
+```bash
+bash data_demo/run_command.sh
 ```
 
 ### Run with Your Data
@@ -207,7 +209,17 @@ nextflow run main.nf \
 Integrate multiple samples with Harmony:
 
 ```bash
-nextflow run main.nf  -profile apocrita,singularity   --input data_demo/MultiSample/H5AD/samplesheet.csv  --outdir results_dge   --run_integration   --batch_key batch   --calculate_integration_metrics   --run_dge   --contrasts_file data_demo/MultiSample/H5AD/contrasts_example.csv
+nextflow run main.nf \
+  -profile conda \
+  --input data_demo/samplesheet.csv \
+  --contrasts_file data_demo/contrasts.csv \
+  --outdir results_demo \
+  --run_integration true \
+  --batch_key sample_id \
+  --dge_groupby condition \
+  --dge_reference Control \
+  --run_gsea true \
+  --organism human
 ```
 
 ### HPC Execution

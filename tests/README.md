@@ -55,8 +55,11 @@ python tests/inspect_output.py path/to/file.h5ad
 For pipeline testing and examples, see `data_demo/`:
 
 ```bash
+# Generate demo data (once)
+python data_demo/generate_demo.py
+
 # Run pipeline with demo data
-nextflow run main.nf --input data_demo/H5AD/samplesheet.csv --outdir results
+bash data_demo/run_command.sh
 ```
 
 See `data_demo/README.md` for complete documentation.

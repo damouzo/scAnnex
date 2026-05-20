@@ -1,129 +1,69 @@
-# scAnnex Demo Data
+# scAnnex Demo Dataset
 
-This directory contains demo datasets in multiple formats for testing the scAnnex pipeline.
+Synthetic PBMC dataset simulating the output of nf-core/scrnaseq (CellRanger → mtx_conversions).
+Designed to exercise the full scAnnex pipeline without using patient or sensitive data.
 
-## Dataset Details
+## Dataset
 
-- **Source**: PBMC 1k v3 from 10x Genomics
-- **Cells**: ~1,000 PBMCs (peripheral blood mononuclear cells)
-- **Species**: Human
-- **Technology**: 10x Chromium v3
+| Property | Value |
+|---|---|
+| Samples | 6 (3 Control + 3 Treatment) |
+| Cells per sample | ~1,000 |
+| Genes | ~2,000 human HGNC symbols |
+| Cell types | T CD4+, T CD8+, B cells, NK cells, Monocytes |
+| Biological scenario | IFN-beta stimulation of PBMCs |
+| DE signal | ~50 IFN-response genes upregulated in Treatment (log2FC 1.5–3.0) |
+| Expected GSEA pathways | HALLMARK_INTERFERON_ALPHA_RESPONSE, HALLMARK_INTERFERON_GAMMA_RESPONSE |
 
-## Quick Start
+## Setup
 
-### Test with H5AD format
-
-```bash
-nextflow run main.nf \
-  --input data_demo/H5AD/samplesheet.csv \
-  --outdir results_h5ad \
-  -profile conda
-```
-
-### Test with 10xMTX format
+**Step 1 — Generate the H5AD files** (run once, requires the scAnnex conda environment):
 
 ```bash
-nextflow run main.nf \
-  --input data_demo/10xMTX/samplesheet.csv \
-  --outdir results_mtx \
-  -profile conda
+# Activate the scAnnex environment first
+conda activate scannex   # adjust name/path to match your installation
+
+python data_demo/generate_demo.py
 ```
 
-### Test with RDS format
+This creates 6 files in `data_demo/`:
 
-First, generate the RDS file (requires R + Seurat):
+```
+Ctrl_PBMC_C1_filtered_matrix.h5ad
+Ctrl_PBMC_C2_filtered_matrix.h5ad
+Ctrl_PBMC_C3_filtered_matrix.h5ad
+Treat_PBMC_T1_filtered_matrix.h5ad
+Treat_PBMC_T2_filtered_matrix.h5ad
+Treat_PBMC_T3_filtered_matrix.h5ad
+```
+
+**Step 2 — Run the pipeline:**
+
 ```bash
-cd data_demo/RDS
-Rscript generate_rds.R
-cd ../..
+# Local (conda environment) — run from anywhere
+bash data_demo/run_command.sh
+
+# HPC / SLURM — run from anywhere
+sbatch data_demo/submit.sh
 ```
 
-Then run the pipeline:
-```bash
-nextflow run main.nf \
-  --input data_demo/RDS/samplesheet.csv \
-  --outdir results_rds \
-  -profile conda
-```
+Both scripts locate the project root automatically via `BASH_SOURCE[0]`, so they can be called from any directory.
 
-**Note:** Always include `-profile conda` (or `docker`/`singularity`) to ensure dependencies are available.
+## Expected results
 
-## Samplesheet Format
+`results_demo/` will contain:
 
-Each format includes a `samplesheet.csv` with the following structure:
+- **QC reports** — per-sample cell counts, mitochondrial fraction, doublets
+- **Clustering** — UMAP with cell type annotations (CellTypist: Immune_All_Low model)
+- **Volcano plot** — ISG15, MX1, IFIT1, IFIT2, IFIT3, IFI44L clearly upregulated in Treatment
+- **GSEA** — enrichment in interferon alpha and gamma response hallmarks
 
-```csv
-sample_id,file_type,file_path,batch,condition
-PBMC_1k,h5ad,data_demo/H5AD/pbmc_1k.h5ad,batch1,control
-```
+## Files
 
-Required columns:
-- **sample_id**: Unique identifier for the sample
-- **file_type**: Format type (h5ad, mtx, or rds)
-- **file_path**: Path to data file/directory
-- **batch**: Batch identifier for integration
-- **condition**: Experimental condition
-
-## Regenerating Demo Files
-
-### H5AD from MTX
-```bash
-cd data_demo
-python3 generate_h5ad.py
-```
-
-### RDS from MTX
-```bash
-cd data_demo
-Rscript generate_rds.R
-```
-
-Requirements:
-- **H5AD**: Python 3.8+, scanpy, pandas
-- **RDS**: R 4.0+, Seurat
-
-## Pipeline Options
-
-Common parameters:
-```bash
-nextflow run main.nf \
-  --input <samplesheet.csv> \
-  --outdir <output_directory> \
-  --skip_doublet_detection \
-  --skip_integration \
-  --min_genes 200 \
-  --min_cells 3
-```
-
-For full options, see:
-```bash
-nextflow run main.nf --help
-```
-
-## Expected Output
-
-The pipeline will generate:
-- Quality control reports
-- Normalized and integrated data
-- Cell type annotations (if enabled)
-- Interactive dashboard
-- Analysis reports
-
-Output structure:
-```
-results/
-├── pipeline_info/
-├── unify_input/
-├── quality_control/
-├── standard_processing/
-├── normalize_integrate/
-├── auto_annot/
-└── dashboard/
-```
-
-## Notes
-
-- The 10xMTX format is the original data format
-- H5AD is generated from 10xMTX
-- RDS must be generated separately (requires R/Seurat)
-- All three formats contain the same cells and should produce equivalent results
+| File | Description |
+|---|---|
+| `generate_demo.py` | Script to synthesise the 6 H5AD files |
+| `samplesheet.csv` | Pipeline input (6 samples, relative paths) |
+| `contrasts.csv` | DGE contrast definition (Treatment vs Control) |
+| `run_command.sh` | Local execution with conda profile |
+| `submit.sh` | SLURM submission for HPC clusters |

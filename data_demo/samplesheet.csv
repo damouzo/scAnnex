@@ -1,0 +1,7 @@
+sample_id,file_type,file_path,batch,condition
+Ctrl_PBMC_C1,h5ad,data_demo/Ctrl_PBMC_C1_filtered_matrix.h5ad,batch1,Control
+Ctrl_PBMC_C2,h5ad,data_demo/Ctrl_PBMC_C2_filtered_matrix.h5ad,batch2,Control
+Ctrl_PBMC_C3,h5ad,data_demo/Ctrl_PBMC_C3_filtered_matrix.h5ad,batch3,Control
+Treat_PBMC_T1,h5ad,data_demo/Treat_PBMC_T1_filtered_matrix.h5ad,batch1,Treatment
+Treat_PBMC_T2,h5ad,data_demo/Treat_PBMC_T2_filtered_matrix.h5ad,batch2,Treatment
+Treat_PBMC_T3,h5ad,data_demo/Treat_PBMC_T3_filtered_matrix.h5ad,batch3,Treatment
