@@ -6,10 +6,10 @@ name: Build and push own containers to GHCR
 #
 # Triggers:
 #   - push: rebuild only the container(s) whose source changed
-#   - workflow_dispatch: manual rebuild (all componentos)
+#   - workflow_dispatch: manual rebuild (all containers)
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'containers/gsea/**'
       - 'containers/pseudobulk/**'
@@ -48,63 +48,125 @@ jobs:
             pseudobulk: ['containers/pseudobulk/**']
             dashboard: ['containers/scannex_dashboard/**']
 
-  build:
-    name: Build ${{ matrix.name }}
+  build-gsea:
+    name: Build gsea
     runs-on: ubuntu-latest
     needs: [detect]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: gsea
-            context: containers/gsea
-            file: containers/gsea/Dockerfile
-            change: gsea
-          - name: pseudobulk
-            context: containers/pseudobulk
-            file: containers/pseudobulk/Dockerfile
-            change: pseudobulk
-          - name: dashboard
-            context: containers/scannex_dashboard
-            file: containers/scannex_dashboard/Dockerfile
-            change: dashboard
     if: |
       always() && !cancelled() && (
-        (github.event_name == 'push' && needs.detect.outputs[matrix.change] == 'true') ||
+        (github.event_name == 'push' && needs.detect.outputs.gsea == 'true') ||
         (github.event_name == 'workflow_dispatch' &&
-          (github.event.inputs.target == matrix.name || github.event.inputs.target == 'all'))
+          (github.event.inputs.target == 'gsea' || github.event.inputs.target == 'all'))
       )
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
-
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags/labels)
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_BASE }}/${{ matrix.name }}
+          images: ${{ env.IMAGE_BASE }}/gsea
           tags: |
             type=raw,value=latest
             type=sha,prefix=sha-
-
       - uses: docker/setup-buildx-action@v3
-
-      - name: Build and push ${{ matrix.name }}
+      - name: Build and push gsea
         uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
+          context: containers/gsea
+          file: containers/gsea/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          cache-from: type=gha,scope=gsea
+          cache-to: type=gha,mode=max,scope=gsea
+
+  build-pseudobulk:
+    name: Build pseudobulk
+    runs-on: ubuntu-latest
+    needs: [detect]
+    if: |
+      always() && !cancelled() && (
+        (github.event_name == 'push' && needs.detect.outputs.pseudobulk == 'true') ||
+        (github.event_name == 'workflow_dispatch' &&
+          (github.event.inputs.target == 'pseudobulk' || github.event.inputs.target == 'all'))
+      )
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BASE }}/pseudobulk
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push pseudobulk
+        uses: docker/build-push-action@v5
+        with:
+          context: containers/pseudobulk
+          file: containers/pseudobulk/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=pseudobulk
+          cache-to: type=gha,mode=max,scope=pseudobulk
+
+  build-dashboard:
+    name: Build dashboard
+    runs-on: ubuntu-latest
+    needs: [detect]
+    if: |
+      always() && !cancelled() && (
+        (github.event_name == 'push' && needs.detect.outputs.dashboard == 'true') ||
+        (github.event_name == 'workflow_dispatch' &&
+          (github.event.inputs.target == 'dashboard' || github.event.inputs.target == 'all'))
+      )
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BASE }}/dashboard
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push dashboard
+        uses: docker/build-push-action@v5
+        with:
+          context: containers/scannex_dashboard
+          file: containers/scannex_dashboard/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,mode=max,scope=dashboard
