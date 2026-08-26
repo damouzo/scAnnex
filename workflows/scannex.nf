@@ -17,6 +17,8 @@ include { AUTO_ANNOT_SUMMARIZE    } from '../modules/local/auto_annot_summarize'
 include { INTEGRATE_HARMONYPY     } from '../modules/local/integrate_harmonypy'
 include { MERGE_SAMPLES           } from '../modules/local/merge_samples'
 include { DIFFERENTIAL_EXPRESSION } from '../modules/local/differential_expression'
+include { PSEUDOBULK_BUILD        } from '../modules/local/pseudobulk_dge'
+include { PSEUDOBULK_DGE          } from '../modules/local/pseudobulk_dge'
 include { GSEA                    } from '../modules/local/gsea'
 include { LAUNCH_DASHBOARD        } from '../modules/local/launch_dashboard'
 
@@ -202,7 +204,19 @@ workflow SCANNEX {
     }
 
     //
-    // STEP 7: Differential Expression Analysis
+    // STEP 6b: Pseudobulk DGE (DESeq2, per cell type) - Paper-ready contrasting
+    //
+    def pseudobulk_tables = Channel.empty()
+    def pseudobulk_status_json = Channel.empty()
+    if (params.run_pseudobulk_dge) {
+        PSEUDOBULK_BUILD ( annotated_h5ad )
+        PSEUDOBULK_DGE  ( PSEUDOBULK_BUILD.out.counts, PSEUDOBULK_BUILD.out.metadata )
+        pseudobulk_tables = PSEUDOBULK_DGE.out.tables
+        pseudobulk_status_json = PSEUDOBULK_DGE.out.status_json
+    }
+
+    //
+    // STEP 7: Differential Expression Analysis (cluster/cell-type markers)
     //
     if (params.run_dge) {
         DIFFERENTIAL_EXPRESSION (
@@ -213,15 +227,25 @@ workflow SCANNEX {
         )
 
         if (params.run_gsea) {
-            def dge_contrast_tables = DIFFERENTIAL_EXPRESSION.out.tables
-                .flatten()
-                .filter { csv ->
-                    csv.name.endsWith('_results.csv') && !csv.name.startsWith('all_contrasts_')
-                }
-                .map { csv ->
-                    def contrast = csv.baseName.replaceFirst(/_results$/, '')
-                    tuple(contrast, csv)
-                }
+            def dge_contrast_tables
+            if (params.run_pseudobulk_dge) {
+                // GSEA prefers pseudo-bulk contrast tables (biological replication respected)
+                dge_contrast_tables = pseudobulk_tables
+                    .map { csv ->
+                        def contrast = csv.baseName.replaceFirst(/_results$/, '')
+                        tuple(contrast, csv)
+                    }
+            } else {
+                dge_contrast_tables = DIFFERENTIAL_EXPRESSION.out.tables
+                    .flatten()
+                    .filter { csv ->
+                        csv.name.endsWith('_results.csv') && !csv.name.startsWith('all_contrasts_')
+                    }
+                    .map { csv ->
+                        def contrast = csv.baseName.replaceFirst(/_results$/, '')
+                        tuple(contrast, csv)
+                    }
+            }
 
             def gsea_script = Channel.value(file("${projectDir}/bin/gsea_analysis.R"))
 
@@ -256,6 +280,8 @@ workflow SCANNEX {
     h5ad = final_output
     qc_results = QUALITY_CONTROL.out.qc_dir
     standard_results = STANDARD_PROCESSING.out.results_dir
+    pseudobulk_tables = pseudobulk_tables
+    pseudobulk_status = pseudobulk_status_json
 }
 
 /*

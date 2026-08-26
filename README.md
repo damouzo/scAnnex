@@ -44,14 +44,15 @@ scAnnex automates the complete workflow for single-cell RNA-seq analysis:
 
 - **Nextflow scRNA Analaysis Pipeline** — End-to-end pipeline in nextflow dsl2
 - **Interactive Dashboard** — Real-time exploration with R Shiny
-- **Quality Control** — Adaptive filtering with quantile-based thresholds
+- **Quality Control** — Adaptive filtering with MAD-based automatic thresholds (5 MAD) plus a hard mitochondrial cap
 - **Doublet Detection** — Scrublet integration for automated doublet removal
 - **Normalization** — Log-normalization and highly variable gene selection
 - **Batch Correction** — Harmony integration for multi-sample datasets
 - **Clustering** — Multi-resolution Leiden clustering
-- **Cell Annotation** — CellTypist integration with automatic model download
+- **Cell Annotation** — CellTypist + Azimuth (bone marrow) + SingleR (Novershtern) + scType
 - **Annotation Station** — Define cell types your way with rule-based annotation
-- **Differential Gene Expresion** — Multiple-contrast analysis through wilconxon
+- **Differential Gene Expression** — Pseudo-bulk DESeq2 per cell type (paper-ready, avoids pseudo-replication) plus Wilcoxon cluster markers
+- **Gene Set Enrichment Analysis** — GSEA on pseudo-bulk contrast tables
 
 
 ## Quick Start
@@ -130,10 +131,12 @@ Choose the right execution profile for your environment:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `--use_quantile_filtering` | Use quantile-based thresholds | `true` |
+| `--use_mad_thresholds` | Use MAD-based automatic thresholds | `true` |
+| `--mad_multiplier` | MAD multiplier | `5.0` |
+| `--use_quantile_filtering` | Use quantile-based thresholds (alternative) | `false` |
 | `--feature_quantile_low` | Lower percentile for genes | `0.10` |
 | `--feature_quantile_high` | Upper percentile for genes | `0.90` |
-| `--max_mito_percent` | Max mitochondrial percentage | `20` |
+| `--max_mito_percent` | Max mitochondrial percentage (hard cap) | `10` |
 
 ### Processing
 
@@ -143,7 +146,20 @@ Choose the right execution profile for your environment:
 | `--run_integration` | Enable batch correction | `false` |
 | `--batch_key` | Batch column name | `null` |
 | `--run_auto_annotation` | Annotate cell types | `true` |
-| `--celltypist_model` | CellTypist model | `Immune_All_Low.pkl` |
+| `--celltypist_models` | CellTypist models | `Immune_All_Low.pkl,Adult_cHSPCs_Illumina.pkl` |
+| `--azimuth_refs` | Azimuth reference (bone marrow) | `bonemarrowref` |
+| `--singler_refs` | SingleR reference | `NovershternHematopoieticData` |
+
+### Pseudobulk DGE (DESeq2, per cell type)
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--run_pseudobulk_dge` | Run pseudo-bulk DESeq2 DGE per cell type | `true` |
+| `--pseudobulk_min_cells` | Min cells per sample x cell type aggregate | `10` |
+| `--pseudobulk_groupby` | obs column for aggregates | `cell_type` |
+| `--pseudobulk_control_group` | Reference condition (defaults to `dge_reference`) | `null` |
+| `--pseudobulk_padj_cutoff` | Adjusted p-value cutoff | `0.05` |
+| `--pseudobulk_shrink` | LFC shrinkage type | `apeglm` |
 
 ### Clustering
 
@@ -192,7 +208,7 @@ Synthetic dataset: 3 Control + 3 Treatment samples, batch-corrected with Harmony
 # Generate synthetic H5AD files
 python data_demo/generate_demo.py
 
-# Run full pipeline
+# Run full pipeline (pseudo-bulk DESeq2 DGE + GSEA included)
 nextflow run main.nf \
   -profile conda \
   --input data_demo/samplesheet.csv \

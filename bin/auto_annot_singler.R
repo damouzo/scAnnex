@@ -115,6 +115,7 @@ for (ref_name in refs) {
         label_col <- paste0("auto_annot_singler_", ref_slug)
         score_col <- paste0(label_col, "_score")
         delta_col <- paste0(label_col, "_delta_next")
+        pruned_col <- paste0(label_col, "_pruned")
 
         pred_df <- as.data.frame(pred, stringsAsFactors = FALSE, check.names = FALSE)
 
@@ -126,6 +127,11 @@ for (ref_name in refs) {
         labels_vals <- rep(NA_character_, nrow(pred_df))
         if ("labels" %in% colnames(pred_df)) {
             labels_vals <- as.character(pred_df[["labels"]])
+        }
+
+        pruned_vals <- rep(NA_character_, nrow(pred_df))
+        if (!is.null(pred$pruned.labels)) {
+            pruned_vals <- as.character(pred$pruned.labels)
         }
 
         delta_vals <- rep(NA_real_, nrow(pred_df))
@@ -140,6 +146,7 @@ for (ref_name in refs) {
         block[[label_col]] <- labels_vals
         block[[score_col]] <- as.numeric(score_vals)
         block[[delta_col]] <- delta_vals
+        block[[pruned_col]] <- pruned_vals
 
         if (is.null(results)) {
             results <- block
@@ -156,10 +163,12 @@ for (ref_name in refs) {
         label_col <- paste0("auto_annot_singler_", ref_slug)
         score_col <- paste0(label_col, "_score")
         delta_col <- paste0(label_col, "_delta_next")
+        pruned_col <- paste0(label_col, "_pruned")
         placeholder <- data.frame(cell_id = all_cells, stringsAsFactors = FALSE)
         placeholder[[label_col]] <- NA_character_
         placeholder[[score_col]] <- NA_real_
         placeholder[[delta_col]] <- NA_real_
+        placeholder[[pruned_col]] <- NA_character_
 
         if (is.null(results)) {
             results <<- placeholder

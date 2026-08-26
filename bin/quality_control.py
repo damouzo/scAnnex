@@ -592,9 +592,15 @@ def apply_qc_filters(
         if 'total_counts' in thresholds and max_counts is None:
             _, max_counts = thresholds['total_counts']
             max_counts = int(max_counts) if max_counts < np.inf else None
-        if 'pct_counts_mt' in thresholds and max_mito is None:
-            _, max_mito = thresholds['pct_counts_mt']
-            # Keep manual max_mito if provided, it takes precedence
+        if 'pct_counts_mt' in thresholds:
+            _, mad_mito_upper = thresholds['pct_counts_mt']
+            # Effective mitochondrial cap = min(MAD upper bound, manual cap).
+            # This prevents the manual cap (max_mito) from ever allowing cells with
+            # mitochondrial fraction above the statistical MAD outlier threshold.
+            if max_mito is None:
+                max_mito = mad_mito_upper
+            else:
+                max_mito = min(mad_mito_upper, max_mito)
     
     # Initialize Cell Attrition Log
     attrition_log = []

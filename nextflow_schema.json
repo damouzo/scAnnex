@@ -488,7 +488,7 @@
                 },
                 "singler_refs": {
                     "type": "string",
-                    "default": "BlueprintEncodeData",
+                    "default": "NovershternHematopoieticData",
                     "description": "Comma-separated SingleR celldex references",
                     "fa_icon": "fas fa-database"
                 },
@@ -497,6 +497,12 @@
                     "default": true,
                     "description": "Enable SingleR pruned labels",
                     "fa_icon": "fas fa-cut"
+                },
+                "cell_type_column": {
+                    "type": ["string", "null"],
+                    "default": null,
+                    "description": "Canonical cell type column used for pseudobulk DGE. Default: auto-detect SingleR pruned column (stable across references)",
+                    "fa_icon": "fas fa-tag"
                 },
                 "sctype_enable": {
                     "type": "boolean",
@@ -641,6 +647,57 @@
                     "fa_icon": "far fa-clock"
                 }
             }
+        },
+        "pseudobulk_dge_options": {
+            "title": "Pseudobulk differential expression options",
+            "type": "object",
+            "description": "DESeq2 pseudo-bulk differential expression per cell type. Aggregates raw counts by sample x cell type (biological reference unit = sample), avoiding pseudo-replication.",
+            "fa_icon": "fas fa-chart-line",
+            "properties": {
+                "run_pseudobulk_dge": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run pseudo-bulk DESeq2 DGE per cell type",
+                    "fa_icon": "fas fa-chart-line"
+                },
+                "pseudobulk_min_cells": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Minimum cells per sample x cell type aggregate",
+                    "fa_icon": "fas fa-filter"
+                },
+                "pseudobulk_groupby": {
+                    "type": "string",
+                    "default": "cell_type",
+                    "description": "obs column used to group aggregates (canonical cell type)",
+                    "fa_icon": "fas fa-tag"
+                },
+                "pseudobulk_design": {
+                    "type": "string",
+                    "default": "condition",
+                    "description": "DESeq2 design term (condition)",
+                    "fa_icon": "fas fa-object-group"
+                },
+                "pseudobulk_control_group": {
+                    "type": ["string", "null"],
+                    "default": null,
+                    "description": "Reference condition for contrasts; defaults to dge_reference",
+                    "fa_icon": "fas fa-balance-scale"
+                },
+                "pseudobulk_padj_cutoff": {
+                    "type": "number",
+                    "default": 0.05,
+                    "description": "Adjusted p-value cutoff for significance labelling",
+                    "fa_icon": "fas fa-percentage"
+                },
+                "pseudobulk_shrink": {
+                    "type": "string",
+                    "default": "apeglm",
+                    "enum": ["apeglm", "ashr", "normal"],
+                    "description": "LFC shrinkage type used by DESeq2 lfcShrink",
+                    "fa_icon": "fas fa-compress"
+                }
+            }
         }
     },
     "allOf": [
@@ -667,6 +724,9 @@
         },
         {
             "$ref": "#/definitions/annotation_options"
+        },
+        {
+            "$ref": "#/definitions/pseudobulk_dge_options"
         },
         {
             "$ref": "#/definitions/cellbender_options"

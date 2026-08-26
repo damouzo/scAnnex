@@ -26,6 +26,7 @@ process AUTO_ANNOT_SUMMARIZE {
 
     script:
     def args = task.ext.args ?: ''
+    def cell_type_col = params.cell_type_column ? "--cell-type-column ${params.cell_type_column}" : ''
     """
     python ${projectDir}/bin/auto_annot_merge.py \
         --input ${base_h5ad} \
@@ -39,6 +40,7 @@ process AUTO_ANNOT_SUMMARIZE {
         --azimuth-status ${azimuth_status} \
         --singler ${singler_annotations} \
         --singler-status ${singler_status} \
+        ${cell_type_col} \
         ${args}
 
     cat <<-END_VERSIONS > versions.yml
