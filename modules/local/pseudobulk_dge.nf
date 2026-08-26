@@ -57,9 +57,9 @@ process PSEUDOBULK_DGE {
     label 'process_medium'
 
     // Differential expression on pseudo-bulk aggregates with DESeq2.
-    // For singularity/HPC environments, provide a DESeq2 container image
-    // (see containers/apptainer_pseudobulk.def); otherwise conda is used.
+    // Published to GHCR by .github/workflows/build-containers.yml; conda fallback.
     conda "\"bioconductor-deseq2\" \"bioconductor-apeglm\" \"r-optparse\" \"r-jsonlite\" \"r-data.table\" \"r-ggplot2\""
+    container "oras://ghcr.io/damouzo/scannex/pseudobulk:latest"
 
     input:
     path(counts)

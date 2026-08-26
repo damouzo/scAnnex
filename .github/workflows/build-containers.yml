@@ -1,84 +1,110 @@
-name: Build and push Dashboard Docker image to DockerHub
+name: Build and push own containers to GHCR
 
-# Triggered when a version tag is pushed (e.g. git tag v1.0.0 && git push --tags)
-# Also allows manual trigger from the Actions tab.
+# Own scAnnex images (GSEA, pseudobulk DESeq2, dashboard) are published to GHCR.
+# Wave images (scanpy, celltypist, singleR, ...) are not built here; they are
+# pulled on-demand by Nextflow from community.wave.seqera.io when the pipeline runs.
+#
+# Triggers:
+#   - push: rebuild only the container(s) whose source changed
+#   - workflow_dispatch: manual rebuild (all componentos)
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [main]
+    paths:
+      - 'containers/gsea/**'
+      - 'containers/pseudobulk/**'
+      - 'containers/scannex_dashboard/**'
+      - '.github/workflows/build-containers.yml'
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Image tag to push (e.g. 1.0.0)'
-        required: true
-        default: 'latest'
+      target:
+        description: 'Which container to build'
+        required: false
+        default: 'all'
+        type: choice
+        options: [gsea, pseudobulk, dashboard, all]
 
 env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}/scannex
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build-and-push:
+  detect:
+    name: Detect changed containers
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     outputs:
-      tag: ${{ steps.version.outputs.tag }}
+      gsea: ${{ steps.filter.outputs.gsea }}
+      pseudobulk: ${{ steps.filter.outputs.pseudobulk }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            gsea: ['containers/gsea/**']
+            pseudobulk: ['containers/pseudobulk/**']
+            dashboard: ['containers/scannex_dashboard/**']
+
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    needs: [detect]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gsea
+            context: containers/gsea
+            file: containers/gsea/Dockerfile
+            change: gsea
+          - name: pseudobulk
+            context: containers/pseudobulk
+            file: containers/pseudobulk/Dockerfile
+            change: pseudobulk
+          - name: dashboard
+            context: containers/scannex_dashboard
+            file: containers/scannex_dashboard/Dockerfile
+            change: dashboard
+    if: |
+      always() && !cancelled() && (
+        (github.event_name == 'push' && needs.detect.outputs[matrix.change] == 'true') ||
+        (github.event_name == 'workflow_dispatch' &&
+          (github.event.inputs.target == matrix.name || github.event.inputs.target == 'all'))
+      )
     permissions:
       contents: read
       packages: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Extract version from tag
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            # Strip leading 'v' from tag name (v1.0.0 → 1.0.0)
-            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Log in to DockerHub
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract Docker metadata
+      - name: Extract metadata (tags/labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/scannex-dashboard
+          images: ${{ env.IMAGE_BASE }}/${{ matrix.name }}
           tags: |
-            type=raw,value=${{ steps.version.outputs.tag }}
-            type=raw,value=latest,enable=${{ !contains(steps.version.outputs.tag, 'dev') }}
+            type=raw,value=latest
+            type=sha,prefix=sha-
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.name }}
+        uses: docker/build-push-action@v5
         with:
-          context: containers/scannex_dashboard
-          file: containers/scannex_dashboard/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Cache layers across builds to speed up repeat pushes
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Image digest
-        run: echo "Pushed ${{ steps.meta.outputs.tags }}"
-
-  # After push, remind to update the image reference in launch_dashboard_hpc.sh
-  remind:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Reminder
-        run: |
-          echo "=== Next step ==="
-          echo "Update DASHBOARD_IMAGE in dashboard/launch_dashboard_hpc.sh:"
-          echo "  DASHBOARD_IMAGE=\"docker.io/${{ secrets.DOCKERHUB_USERNAME }}/scannex-dashboard:${{ needs.build-and-push.outputs.tag || 'latest' }}\""
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

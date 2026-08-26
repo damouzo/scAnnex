@@ -209,18 +209,20 @@ echo ""
 
 # ── Singularity image resolution ────────────────────────────────────────────
 #
-# Image published to DockerHub: docker.io/damouzo/scannex-dashboard:1.0.0
+# Image published to GHCR by .github/workflows/build-containers.yml:
+#   ghcr.io/damouzo/scannex/dashboard:latest
 # Pulled once to local SIF file, then reused from cache (no repeated downloads).
 #
 # Override priority:
 #   1) SCANNEX_DASHBOARD_SIF env var  — explicit path to a local .sif file
-#   2) Shared Singularity cache on HPC scratch (/gpfs/scratch/$USER/singularity_cache)
-#   3) SINGULARITY_CACHEDIR env var (if set)
-#   4) /gpfs/scratch/$USER/scannex_cache/singularity (scratch fallback)
-#   5) ~/.singularity/ (local fallback)
+#   2) SCANNEX_DASHBOARD_IMAGE env var — override the image URI (default GHCR latest)
+#   3) Shared Singularity cache on HPC scratch (/gpfs/scratch/$USER/singularity_cache)
+#   4) SINGULARITY_CACHEDIR env var (if set)
+#   5) /gpfs/scratch/$USER/scannex_cache/singularity (scratch fallback)
+#   6) ~/.singularity/ (local fallback)
 
-DASHBOARD_IMAGE="docker://damouzo/scannex-dashboard:1.0.0"
-SIF_FILENAME="scannex-dashboard-1.0.0.sif"
+DASHBOARD_IMAGE="${SCANNEX_DASHBOARD_IMAGE:-docker://ghcr.io/damouzo/scannex/dashboard:latest}"
+SIF_FILENAME="scannex-dashboard-latest.sif"
 
 if [[ -n "${SCANNEX_DASHBOARD_SIF:-}" ]]; then
     SIF_PATH="${SCANNEX_DASHBOARD_SIF}"

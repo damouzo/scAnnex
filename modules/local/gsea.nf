@@ -3,7 +3,7 @@ process GSEA {
     label 'process_medium'
 
     conda "\"bioconductor-clusterprofiler\" \"bioconductor-enrichplot\" \"bioconductor-dose\" \"bioconductor-reactomepa\" \"bioconductor-pathview\" \"bioconductor-keggrest\" \"bioconductor-org.hs.eg.db\" \"bioconductor-org.mm.eg.db\" \"bioconductor-go.db\" \"r-ggplot2\" \"r-data.table\" \"r-dplyr\" \"r-stringr\" \"r-jsonlite\""
-    container "oras://docker.io/damouzo/scannex:gsea-1.0"
+    container "oras://ghcr.io/damouzo/scannex/gsea:latest"
 
     input:
     tuple val(comparison), path(dge_csv)
