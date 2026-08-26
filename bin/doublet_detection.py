@@ -27,6 +27,8 @@ def parse_args():
     parser.add_argument("--attrition-output", type=str, default="doublet_attrition.json", help="Output attrition JSON")
     parser.add_argument("--expected-doublet-rate", type=float, default=0.05,
                        help="Expected doublet rate")
+    parser.add_argument("--min-cells-doublet", type=int, default=50,
+                       help="Minimum number of cells required for reliable doublet detection")
     parser.add_argument("--remove-doublets", action="store_true",
                        help="Remove detected doublets (SLC toggle)")
     parser.add_argument("--save-attrition-log", action="store_true",
@@ -34,10 +36,20 @@ def parse_args():
     return parser.parse_args()
 
 
-def run_scrublet(adata, expected_doublet_rate=0.05):
+def run_scrublet(adata, expected_doublet_rate=0.05, min_cells_doublet=50):
     """Run Scrublet doublet detection"""
     print("Running Scrublet doublet detection...")
-    
+
+    n_cells = adata.n_obs
+    n_genes = adata.n_vars
+    if n_cells < min_cells_doublet:
+        raise ValueError(
+            f"Sample has only {n_cells} cells x {n_genes} genes after QC - "
+            f"too few for reliable doublet detection (min allowed: {min_cells_doublet}). "
+            f"Check upstream QC/CellBender output or exclude this sample."
+        )
+
+    n_prin_comps = max(2, min(30, n_cells - 1, n_genes - 1))
     scrub = scr.Scrublet(
         adata.X,
         expected_doublet_rate=expected_doublet_rate
@@ -47,7 +59,7 @@ def run_scrublet(adata, expected_doublet_rate=0.05):
         min_counts=2,
         min_cells=3,
         min_gene_variability_pctl=85,
-        n_prin_comps=30
+        n_prin_comps=n_prin_comps
     )
     
     # Add results to adata
@@ -88,7 +100,7 @@ def main():
     print(f"Loaded: {n_cells_initial} cells x {adata.n_vars} genes")
     
     # Run Scrublet
-    adata, scrub = run_scrublet(adata, args.expected_doublet_rate)
+    adata, scrub = run_scrublet(adata, args.expected_doublet_rate, args.min_cells_doublet)
     
     # Generate plots
     print("Generating plots...")

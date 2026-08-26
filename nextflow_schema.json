@@ -1,753 +1,826 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema",
-    "$id": "https://raw.githubusercontent.com/your-org/scannex/master/nextflow_schema.json",
-    "title": "scAnnex pipeline parameters",
-    "description": "Single-cell RNA-seq downstream analysis pipeline",
-    "type": "object",
-    "definitions": {
-        "input_output_options": {
-            "title": "Input/output options",
-            "type": "object",
-            "fa_icon": "fas fa-terminal",
-            "description": "Define where the pipeline should find input data and save output data.",
-            "required": ["input", "outdir"],
-            "properties": {
-                "input": {
-                    "type": "string",
-                    "format": "file-path",
-                    "description": "Path to input file (H5AD, RDS, or MTX directory)",
-                    "fa_icon": "fas fa-file"
-                },
-                "input_type": {
-                    "type": "string",
-                    "default": "h5ad",
-                    "enum": ["h5ad", "rds", "mtx"],
-                    "description": "Type of input file",
-                    "fa_icon": "fas fa-file-code"
-                },
-                "outdir": {
-                    "type": "string",
-                    "format": "directory-path",
-                    "description": "The output directory where the results will be saved.",
-                    "default": "./results",
-                    "fa_icon": "fas fa-folder-open"
-                }
-            }
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "https://raw.githubusercontent.com/your-org/scannex/master/nextflow_schema.json",
+  "title": "scAnnex pipeline parameters",
+  "description": "Single-cell RNA-seq downstream analysis pipeline",
+  "type": "object",
+  "definitions": {
+    "input_output_options": {
+      "title": "Input/output options",
+      "type": "object",
+      "fa_icon": "fas fa-terminal",
+      "description": "Define where the pipeline should find input data and save output data.",
+      "required": [
+        "input",
+        "outdir"
+      ],
+      "properties": {
+        "input": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Path to input file (H5AD, RDS, or MTX directory)",
+          "fa_icon": "fas fa-file"
         },
-        "quality_control_options": {
-            "title": "Quality control options",
-            "type": "object",
-            "description": "Parameters for quality control filtering",
-            "properties": {
-                "min_genes": {
-                    "type": "integer",
-                    "default": 200,
-                    "description": "Minimum number of genes per cell",
-                    "fa_icon": "fas fa-filter"
-                },
-                "min_cells": {
-                    "type": "integer",
-                    "default": 3,
-                    "description": "Minimum number of cells per gene",
-                    "fa_icon": "fas fa-filter"
-                },
-                "max_genes": {
-                    "type": "integer",
-                    "description": "Maximum number of genes per cell (optional)",
-                    "fa_icon": "fas fa-filter"
-                },
-                "max_counts": {
-                    "type": "integer",
-                    "description": "Maximum number of counts per cell (optional)",
-                    "fa_icon": "fas fa-filter"
-                },
-                "max_mito_percent": {
-                    "type": "number",
-                    "default": 20,
-                    "description": "Maximum mitochondrial percentage",
-                    "fa_icon": "fas fa-percentage"
-                },
-                "use_quantile_filtering": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable quantile-based filtering for nFeatures and nCounts",
-                    "fa_icon": "fas fa-chart-bar"
-                },
-                "feature_quantile_low": {
-                    "type": "number",
-                    "default": 0.10,
-                    "description": "Lower quantile threshold for nFeatures (e.g., 0.10 = 10th percentile)",
-                    "fa_icon": "fas fa-chart-line"
-                },
-                "feature_quantile_high": {
-                    "type": "number",
-                    "default": 0.90,
-                    "description": "Upper quantile threshold for nFeatures (e.g., 0.90 = 90th percentile)",
-                    "fa_icon": "fas fa-chart-line"
-                },
-                "count_quantile_low": {
-                    "type": "number",
-                    "default": 0.10,
-                    "description": "Lower quantile threshold for nCounts (e.g., 0.10 = 10th percentile)",
-                    "fa_icon": "fas fa-chart-line"
-                },
-                "count_quantile_high": {
-                    "type": "number",
-                    "default": 0.90,
-                    "description": "Upper quantile threshold for nCounts (e.g., 0.90 = 90th percentile)",
-                    "fa_icon": "fas fa-chart-line"
-                },
-                "use_mad_thresholds": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Use MAD-based automatic thresholds (alternative to quantile filtering)",
-                    "fa_icon": "fas fa-calculator"
-                },
-                "mad_multiplier": {
-                    "type": "number",
-                    "default": 5.0,
-                    "description": "MAD multiplier for threshold calculation",
-                    "fa_icon": "fas fa-times"
-                },
-                "save_attrition_log": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Save detailed cell filtering attrition log",
-                    "fa_icon": "fas fa-file-alt"
-                }
-            }
+        "input_type": {
+          "type": "string",
+          "default": "h5ad",
+          "enum": [
+            "h5ad",
+            "rds",
+            "mtx"
+          ],
+          "description": "Type of input file",
+          "fa_icon": "fas fa-file-code"
         },
-        "doublet_detection_options": {
-            "title": "Doublet detection options",
-            "type": "object",
-            "description": "Parameters for doublet detection",
-            "properties": {
-                "run_doublet_detection": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Run doublet detection with Scrublet",
-                    "fa_icon": "fas fa-check-circle"
-                },
-                "expected_doublet_rate": {
-                    "type": "number",
-                    "default": 0.05,
-                    "description": "Expected doublet rate",
-                    "fa_icon": "fas fa-calculator"
-                },
-                "doublet_removal": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Remove detected doublets from the dataset",
-                    "fa_icon": "fas fa-trash-alt"
-                }
-            }
-        },
-        "normalization_options": {
-            "title": "Normalization options",
-            "type": "object",
-            "description": "Parameters for normalization",
-            "properties": {
-                "normalization_method": {
-                    "type": "string",
-                    "default": "log",
-                    "enum": ["log", "scran"],
-                    "description": "Normalization method",
-                    "fa_icon": "fas fa-balance-scale"
-                },
-                "target_sum": {
-                    "type": "integer",
-                    "default": 10000,
-                    "description": "Target sum for normalization",
-                    "fa_icon": "fas fa-bullseye"
-                },
-                "n_top_genes": {
-                    "type": "integer",
-                    "default": 2000,
-                    "description": "Number of highly variable genes to identify",
-                    "fa_icon": "fas fa-dna"
-                }
-            }
-        },
-        "integration_options": {
-            "title": "Batch integration options",
-            "type": "object",
-            "description": "Parameters for batch correction",
-            "properties": {
-                "run_integration": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Run batch integration",
-                    "fa_icon": "fas fa-layer-group"
-                },
-                "batch_key": {
-                    "type": "string",
-                    "description": "Column name in obs containing batch information",
-                    "fa_icon": "fas fa-key"
-                },
-                "integration_method": {
-                    "type": "string",
-                    "default": "harmony",
-                    "enum": ["harmony", "scanorama", "bbknn"],
-                    "description": "Integration method",
-                    "fa_icon": "fas fa-cogs"
-                },
-                "harmony_theta": {
-                    "type": "number",
-                    "default": 2.0,
-                    "description": "Harmony diversity clustering penalty parameter",
-                    "fa_icon": "fas fa-sliders-h"
-                },
-                "harmony_max_iter": {
-                    "type": "integer",
-                    "default": 10,
-                    "description": "Maximum number of Harmony iterations",
-                    "fa_icon": "fas fa-repeat"
-                },
-                "calculate_integration_metrics": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Calculate integration quality metrics (kBET, LISI, Silhouette)",
-                    "fa_icon": "fas fa-chart-line"
-                },
-                "save_pre_integration": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Save pre-integration H5AD for comparison",
-                    "fa_icon": "fas fa-save"
-                }
-            }
-        },
-        "cellbender_options": {
-            "title": "CellBender options",
-            "type": "object",
-            "description": "Parameters for ambient RNA removal using CellBender",
-            "properties": {
-                "run_cellbender": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Run CellBender ambient RNA removal (MTX inputs)",
-                    "fa_icon": "fas fa-vial"
-                },
-                "cellbender_expected_cells": {
-                    "type": "string",
-                    "default": "auto",
-                    "description": "Expected number of cells (auto or integer as string)",
-                    "fa_icon": "fas fa-users"
-                },
-                "cellbender_total_droplets": {
-                    "type": "integer",
-                    "default": 25000,
-                    "description": "Total droplets included for CellBender",
-                    "fa_icon": "fas fa-filter"
-                },
-                "cellbender_fpr": {
-                    "type": "number",
-                    "default": 0.01,
-                    "description": "CellBender false positive rate",
-                    "fa_icon": "fas fa-percentage"
-                },
-                "cellbender_epochs": {
-                    "type": "integer",
-                    "default": 150,
-                    "description": "CellBender training epochs",
-                    "fa_icon": "fas fa-redo"
-                }
-            }
-        },
-        "dge_options": {
-            "title": "Differential expression options",
-            "type": "object",
-            "description": "Parameters for differential gene expression analysis",
-            "properties": {
-                "run_dge": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Run differential expression analysis",
-                    "fa_icon": "fas fa-chart-bar"
-                },
-                "contrasts_file": {
-                    "type": ["string", "null"],
-                    "description": "Path to contrasts CSV file",
-                    "fa_icon": "fas fa-file-csv"
-                },
-                "dge_groupby": {
-                    "type": "string",
-                    "default": "condition",
-                    "description": "obs column used for group comparison",
-                    "fa_icon": "fas fa-object-group"
-                },
-                "dge_reference": {
-                    "type": "string",
-                    "default": "control",
-                    "description": "Reference group for DGE",
-                    "fa_icon": "fas fa-balance-scale-left"
-                },
-                "dge_method": {
-                    "type": "string",
-                    "default": "wilcoxon",
-                    "enum": ["wilcoxon", "t-test", "t-test_overestim_var"],
-                    "description": "Statistical method for DGE",
-                    "fa_icon": "fas fa-calculator"
-                },
-                "dge_min_pct": {
-                    "type": "number",
-                    "default": 0.1,
-                    "description": "Minimum fraction of expressing cells",
-                    "fa_icon": "fas fa-percentage"
-                },
-                "dge_logfc_threshold": {
-                    "type": "number",
-                    "default": 0.25,
-                    "description": "Log fold-change threshold",
-                    "fa_icon": "fas fa-sliders-h"
-                },
-                "dge_pval_cutoff": {
-                    "type": "number",
-                    "default": 0.05,
-                    "description": "Adjusted p-value cutoff",
-                    "fa_icon": "fas fa-signal"
-                },
-                "dge_top_n_genes": {
-                    "type": "integer",
-                    "default": 100,
-                    "description": "Top N genes to export per contrast",
-                    "fa_icon": "fas fa-list-ol"
-                },
-                "dge_save_plots": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Generate DGE plots",
-                    "fa_icon": "fas fa-image"
-                },
-                "dge_save_h5ad": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Save H5AD with DGE results",
-                    "fa_icon": "fas fa-save"
-                }
-            }
-        },
-        "gsea_options": {
-            "title": "GSEA options",
-            "type": "object",
-            "description": "Parameters for gene set enrichment analysis",
-            "properties": {
-                "run_gsea": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Run GSEA after DGE",
-                    "fa_icon": "fas fa-route"
-                },
-                "organism": {
-                    "type": "string",
-                    "default": "human",
-                    "enum": ["human", "mouse"],
-                    "description": "Organism used for annotation databases",
-                    "fa_icon": "fas fa-dna"
-                },
-                "gsea_top_pathways": {
-                    "type": "integer",
-                    "default": 10,
-                    "description": "Default number of pathways to include in saved GSEA plots",
-                    "fa_icon": "fas fa-list-ol"
-                },
-                "gsea_pathview_top_n": {
-                    "type": "integer",
-                    "default": 10,
-                    "description": "Top KEGG pathways exported with pathview",
-                    "fa_icon": "fas fa-project-diagram"
-                },
-                "gsea_dashboard_max_pathways": {
-                    "type": "integer",
-                    "default": 50,
-                    "description": "Maximum pathways allowed in dashboard dynamic plots",
-                    "fa_icon": "fas fa-sliders-h"
-                }
-            }
-        },
-        "slurm_options": {
-            "title": "SLURM options",
-            "type": "object",
-            "description": "Optional SLURM executor parameters",
-            "properties": {
-                "slurm_queue": {
-                    "type": ["string", "null"],
-                    "description": "SLURM partition/queue",
-                    "fa_icon": "fas fa-server"
-                },
-                "slurm_account": {
-                    "type": ["string", "null"],
-                    "description": "SLURM account",
-                    "fa_icon": "fas fa-user-tag"
-                }
-            }
-        },
-        "dimensionality_reduction_options": {
-            "title": "Dimensionality reduction options",
-            "type": "object",
-            "description": "Parameters for PCA and UMAP",
-            "properties": {
-                "n_pcs": {
-                    "type": "integer",
-                    "default": 50,
-                    "description": "Number of principal components",
-                    "fa_icon": "fas fa-chart-line"
-                },
-                "n_neighbors": {
-                    "type": "integer",
-                    "default": 15,
-                    "description": "Number of neighbors for UMAP",
-                    "fa_icon": "fas fa-project-diagram"
-                },
-                "umap_min_dist": {
-                    "type": "number",
-                    "default": 0.5,
-                    "description": "Minimum distance for UMAP",
-                    "fa_icon": "fas fa-ruler"
-                }
-            }
-        },
-        "clustering_options": {
-            "title": "Clustering options",
-            "type": "object",
-            "description": "Parameters for clustering",
-            "properties": {
-                "clustering_method": {
-                    "type": "string",
-                    "default": "leiden",
-                    "enum": ["leiden", "louvain"],
-                    "description": "Clustering algorithm",
-                    "fa_icon": "fas fa-sitemap"
-                },
-                "clustering_resolutions": {
-                    "type": "string",
-                    "default": "0.1,0.3,0.5,0.7,0.9",
-                    "description": "Comma-separated list of clustering resolutions",
-                    "fa_icon": "fas fa-sliders-h"
-                },
-                "default_clustering_resolution": {
-                    "type": "number",
-                    "default": 0.5,
-                    "description": "Default clustering resolution for visualization",
-                    "fa_icon": "fas fa-dot-circle"
-                }
-            }
-        },
-        "annotation_options": {
-            "title": "Annotation options",
-            "type": "object",
-            "description": "Parameters for cell type annotation",
-            "properties": {
-                "run_auto_annotation": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Run automatic cell type annotation",
-                    "fa_icon": "fas fa-tag"
-                },
-                "auto_annot_continue_on_error": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Continue pipeline if one annotation tool fails",
-                    "fa_icon": "fas fa-life-ring"
-                },
-                "celltypist_enable": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable CellTypist annotation",
-                    "fa_icon": "fas fa-check-circle"
-                },
-                "celltypist_models": {
-                    "type": "string",
-                    "default": "Immune_All_Low.pkl,Human_BoneMarrow.pkl",
-                    "description": "Comma-separated CellTypist models",
-                    "fa_icon": "fas fa-brain"
-                },
-                "celltypist_majority_voting": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable majority voting for CellTypist predictions",
-                    "fa_icon": "fas fa-vote-yea"
-                },
-                "azimuth_enable": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable Azimuth annotation",
-                    "fa_icon": "fas fa-check-circle"
-                },
-                "azimuth_refs": {
-                    "type": "string",
-                    "default": "pbmcref",
-                    "description": "Comma-separated Azimuth reference codes (allowed: pbmcref, bonemarrowref)",
-                    "fa_icon": "fas fa-database"
-                },
-                "singler_enable": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable SingleR annotation",
-                    "fa_icon": "fas fa-check-circle"
-                },
-                "singler_refs": {
-                    "type": "string",
-                    "default": "NovershternHematopoieticData",
-                    "description": "Comma-separated SingleR celldex references",
-                    "fa_icon": "fas fa-database"
-                },
-                "singler_prune": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable SingleR pruned labels",
-                    "fa_icon": "fas fa-cut"
-                },
-                "cell_type_column": {
-                    "type": ["string", "null"],
-                    "default": null,
-                    "description": "Canonical cell type column used for pseudobulk DGE. Default: auto-detect SingleR pruned column (stable across references)",
-                    "fa_icon": "fas fa-tag"
-                },
-                "sctype_enable": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable scType annotation",
-                    "fa_icon": "fas fa-check-circle"
-                },
-                "sctype_markers_file": {
-                    "type": "string",
-                    "description": "Path to scType markers CSV",
-                    "default": "assets/sctype_markers_mock.csv",
-                    "fa_icon": "fas fa-file-csv"
-                }
-            }
-        },
-        "dashboard_options": {
-            "title": "Interactive Dashboard options",
-            "type": "object",
-            "description": "Parameters for the interactive visualization dashboard",
-            "properties": {
-                "enable_dashboard": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable interactive dashboard launch after pipeline completion",
-                    "fa_icon": "fas fa-chart-bar"
-                },
-                "dashboard_port": {
-                    "type": "integer",
-                    "default": 3838,
-                    "description": "Port for dashboard server (default Shiny port)",
-                    "fa_icon": "fas fa-network-wired"
-                },
-                "dashboard_host": {
-                    "type": "string",
-                    "default": "localhost",
-                    "description": "Host for dashboard server",
-                    "fa_icon": "fas fa-server"
-                }
-            }
-        },
-        "generic_options": {
-            "title": "Generic options",
-            "type": "object",
-            "fa_icon": "fas fa-cog",
-            "description": "Less common options for the pipeline, typically set in a config file.",
-            "properties": {
-                "publish_dir_mode": {
-                    "type": "string",
-                    "default": "copy",
-                    "description": "Method used to save pipeline results to output directory.",
-                    "fa_icon": "fas fa-copy",
-                    "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"]
-                },
-                "email": {
-                    "type": "string",
-                    "description": "Email address for completion summary.",
-                    "fa_icon": "fas fa-envelope",
-                    "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$"
-                },
-                "email_on_fail": {
-                    "type": "string",
-                    "description": "Email address for completion summary, only when pipeline fails.",
-                    "fa_icon": "fas fa-exclamation-triangle",
-                    "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$"
-                },
-                "max_multiqc_email_size": {
-                    "type": "string",
-                    "description": "File size limit when attaching MultiQC reports to summary emails.",
-                    "default": "25.MB",
-                    "fa_icon": "fas fa-file-upload"
-                },
-                "tracedir": {
-                    "type": "string",
-                    "description": "Directory to keep pipeline Nextflow logs and reports.",
-                    "default": "${params.outdir}/pipeline_info",
-                    "fa_icon": "fas fa-cogs"
-                },
-                "validate_params": {
-                    "type": "boolean",
-                    "description": "Boolean whether to validate parameters against the schema at runtime",
-                    "default": true,
-                    "fa_icon": "fas fa-check-square"
-                },
-                "version": {
-                    "type": "boolean",
-                    "description": "Display version and exit",
-                    "fa_icon": "fas fa-question",
-                    "default": false
-                },
-                "help": {
-                    "type": "boolean",
-                    "description": "Display help text",
-                    "fa_icon": "fas fa-question-circle",
-                    "default": false
-                },
-                "config_profile_name": {
-                    "type": "string",
-                    "description": "Institutional config name",
-                    "fa_icon": "fas fa-users-cog"
-                },
-                "config_profile_description": {
-                    "type": "string",
-                    "description": "Institutional config description",
-                    "fa_icon": "fas fa-users-cog"
-                },
-                "custom_config_version": {
-                    "type": "string",
-                    "description": "Git commit id for custom Institutional configs.",
-                    "default": "master",
-                    "fa_icon": "fas fa-users-cog"
-                },
-                "custom_config_base": {
-                    "type": "string",
-                    "description": "Base directory for custom Institutional configs.",
-                    "default": "https://raw.githubusercontent.com/nf-core/configs/master",
-                    "fa_icon": "fas fa-users-cog"
-                }
-            }
-        },
-        "max_job_request_options": {
-            "title": "Max job request options",
-            "type": "object",
-            "fa_icon": "fab fa-acquisitions-incorporated",
-            "description": "Set the top limit for requested resources for any single job.",
-            "properties": {
-                "max_cpus": {
-                    "type": "integer",
-                    "description": "Maximum number of CPUs that can be requested for any single job.",
-                    "default": 16,
-                    "fa_icon": "fas fa-microchip"
-                },
-                "max_memory": {
-                    "type": "string",
-                    "description": "Maximum amount of memory that can be requested for any single job.",
-                    "default": "128.GB",
-                    "fa_icon": "fas fa-memory"
-                },
-                "max_time": {
-                    "type": "string",
-                    "description": "Maximum amount of time that can be requested for any single job.",
-                    "default": "240.h",
-                    "fa_icon": "far fa-clock"
-                }
-            }
-        },
-        "pseudobulk_dge_options": {
-            "title": "Pseudobulk differential expression options",
-            "type": "object",
-            "description": "DESeq2 pseudo-bulk differential expression per cell type. Aggregates raw counts by sample x cell type (biological reference unit = sample), avoiding pseudo-replication.",
-            "fa_icon": "fas fa-chart-line",
-            "properties": {
-                "run_pseudobulk_dge": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Run pseudo-bulk DESeq2 DGE per cell type",
-                    "fa_icon": "fas fa-chart-line"
-                },
-                "pseudobulk_min_cells": {
-                    "type": "integer",
-                    "default": 10,
-                    "description": "Minimum cells per sample x cell type aggregate",
-                    "fa_icon": "fas fa-filter"
-                },
-                "pseudobulk_groupby": {
-                    "type": "string",
-                    "default": "cell_type",
-                    "description": "obs column used to group aggregates (canonical cell type)",
-                    "fa_icon": "fas fa-tag"
-                },
-                "pseudobulk_design": {
-                    "type": "string",
-                    "default": "condition",
-                    "description": "DESeq2 design term (condition)",
-                    "fa_icon": "fas fa-object-group"
-                },
-                "pseudobulk_control_group": {
-                    "type": ["string", "null"],
-                    "default": null,
-                    "description": "Reference condition for contrasts; defaults to dge_reference",
-                    "fa_icon": "fas fa-balance-scale"
-                },
-                "pseudobulk_padj_cutoff": {
-                    "type": "number",
-                    "default": 0.05,
-                    "description": "Adjusted p-value cutoff for significance labelling",
-                    "fa_icon": "fas fa-percentage"
-                },
-                "pseudobulk_shrink": {
-                    "type": "string",
-                    "default": "apeglm",
-                    "enum": ["apeglm", "ashr", "normal"],
-                    "description": "LFC shrinkage type used by DESeq2 lfcShrink",
-                    "fa_icon": "fas fa-compress"
-                }
-            }
+        "outdir": {
+          "type": "string",
+          "format": "directory-path",
+          "description": "The output directory where the results will be saved.",
+          "default": "./results",
+          "fa_icon": "fas fa-folder-open"
         }
+      }
     },
-    "allOf": [
-        {
-            "$ref": "#/definitions/input_output_options"
+    "quality_control_options": {
+      "title": "Quality control options",
+      "type": "object",
+      "description": "Parameters for quality control filtering",
+      "properties": {
+        "min_genes": {
+          "type": "integer",
+          "default": 200,
+          "description": "Minimum number of genes per cell",
+          "fa_icon": "fas fa-filter"
         },
-        {
-            "$ref": "#/definitions/quality_control_options"
+        "min_cells": {
+          "type": "integer",
+          "default": 3,
+          "description": "Minimum number of cells per gene",
+          "fa_icon": "fas fa-filter"
         },
-        {
-            "$ref": "#/definitions/doublet_detection_options"
+        "max_genes": {
+          "type": "integer",
+          "description": "Maximum number of genes per cell (optional)",
+          "fa_icon": "fas fa-filter"
         },
-        {
-            "$ref": "#/definitions/normalization_options"
+        "max_counts": {
+          "type": "integer",
+          "description": "Maximum number of counts per cell (optional)",
+          "fa_icon": "fas fa-filter"
         },
-        {
-            "$ref": "#/definitions/integration_options"
+        "max_mito_percent": {
+          "type": "number",
+          "default": 20,
+          "description": "Maximum mitochondrial percentage",
+          "fa_icon": "fas fa-percentage"
         },
-        {
-            "$ref": "#/definitions/dimensionality_reduction_options"
+        "use_quantile_filtering": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable quantile-based filtering for nFeatures and nCounts",
+          "fa_icon": "fas fa-chart-bar"
         },
-        {
-            "$ref": "#/definitions/clustering_options"
+        "feature_quantile_low": {
+          "type": "number",
+          "default": 0.1,
+          "description": "Lower quantile threshold for nFeatures (e.g., 0.10 = 10th percentile)",
+          "fa_icon": "fas fa-chart-line"
         },
-        {
-            "$ref": "#/definitions/annotation_options"
+        "feature_quantile_high": {
+          "type": "number",
+          "default": 0.9,
+          "description": "Upper quantile threshold for nFeatures (e.g., 0.90 = 90th percentile)",
+          "fa_icon": "fas fa-chart-line"
         },
-        {
-            "$ref": "#/definitions/pseudobulk_dge_options"
+        "count_quantile_low": {
+          "type": "number",
+          "default": 0.1,
+          "description": "Lower quantile threshold for nCounts (e.g., 0.10 = 10th percentile)",
+          "fa_icon": "fas fa-chart-line"
         },
-        {
-            "$ref": "#/definitions/cellbender_options"
+        "count_quantile_high": {
+          "type": "number",
+          "default": 0.9,
+          "description": "Upper quantile threshold for nCounts (e.g., 0.90 = 90th percentile)",
+          "fa_icon": "fas fa-chart-line"
         },
-        {
-            "$ref": "#/definitions/dge_options"
+        "use_mad_thresholds": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use MAD-based automatic thresholds (alternative to quantile filtering)",
+          "fa_icon": "fas fa-calculator"
         },
-        {
-            "$ref": "#/definitions/gsea_options"
+        "mad_multiplier": {
+          "type": "number",
+          "default": 5.0,
+          "description": "MAD multiplier for threshold calculation",
+          "fa_icon": "fas fa-times"
         },
-        {
-            "$ref": "#/definitions/dashboard_options"
-        },
-        {
-            "$ref": "#/definitions/slurm_options"
-        },
-        {
-            "$ref": "#/definitions/generic_options"
-        },
-        {
-            "$ref": "#/definitions/max_job_request_options"
+        "save_attrition_log": {
+          "type": "boolean",
+          "default": true,
+          "description": "Save detailed cell filtering attrition log",
+          "fa_icon": "fas fa-file-alt"
         }
-    ]
+      }
+    },
+    "doublet_detection_options": {
+      "title": "Doublet detection options",
+      "type": "object",
+      "description": "Parameters for doublet detection",
+      "properties": {
+        "run_doublet_detection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run doublet detection with Scrublet",
+          "fa_icon": "fas fa-check-circle"
+        },
+        "expected_doublet_rate": {
+          "type": "number",
+          "default": 0.05,
+          "description": "Expected doublet rate",
+          "fa_icon": "fas fa-calculator"
+        },
+        "doublet_removal": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remove detected doublets from the dataset",
+          "fa_icon": "fas fa-trash-alt"
+        },
+        "doublet_min_cells": {
+          "type": "integer",
+          "default": 50,
+          "description": "Minimum number of cells required for reliable doublet detection. Smaller samples fail with a clear message instead of running unreliable Scrublet.",
+          "fa_icon": "fas fa-users"
+        }
+      }
+    },
+    "normalization_options": {
+      "title": "Normalization options",
+      "type": "object",
+      "description": "Parameters for normalization",
+      "properties": {
+        "normalization_method": {
+          "type": "string",
+          "default": "log",
+          "enum": [
+            "log",
+            "scran"
+          ],
+          "description": "Normalization method",
+          "fa_icon": "fas fa-balance-scale"
+        },
+        "target_sum": {
+          "type": "integer",
+          "default": 10000,
+          "description": "Target sum for normalization",
+          "fa_icon": "fas fa-bullseye"
+        },
+        "n_top_genes": {
+          "type": "integer",
+          "default": 2000,
+          "description": "Number of highly variable genes to identify",
+          "fa_icon": "fas fa-dna"
+        }
+      }
+    },
+    "integration_options": {
+      "title": "Batch integration options",
+      "type": "object",
+      "description": "Parameters for batch correction",
+      "properties": {
+        "run_integration": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run batch integration",
+          "fa_icon": "fas fa-layer-group"
+        },
+        "batch_key": {
+          "type": "string",
+          "description": "Column name in obs containing batch information",
+          "fa_icon": "fas fa-key"
+        },
+        "integration_method": {
+          "type": "string",
+          "default": "harmony",
+          "enum": [
+            "harmony",
+            "scanorama",
+            "bbknn"
+          ],
+          "description": "Integration method",
+          "fa_icon": "fas fa-cogs"
+        },
+        "harmony_theta": {
+          "type": "number",
+          "default": 2.0,
+          "description": "Harmony diversity clustering penalty parameter",
+          "fa_icon": "fas fa-sliders-h"
+        },
+        "harmony_max_iter": {
+          "type": "integer",
+          "default": 10,
+          "description": "Maximum number of Harmony iterations",
+          "fa_icon": "fas fa-repeat"
+        },
+        "calculate_integration_metrics": {
+          "type": "boolean",
+          "default": false,
+          "description": "Calculate integration quality metrics (kBET, LISI, Silhouette)",
+          "fa_icon": "fas fa-chart-line"
+        },
+        "save_pre_integration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Save pre-integration H5AD for comparison",
+          "fa_icon": "fas fa-save"
+        }
+      }
+    },
+    "dge_options": {
+      "title": "Differential expression options",
+      "type": "object",
+      "description": "Parameters for differential gene expression analysis",
+      "properties": {
+        "run_dge": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run differential expression analysis",
+          "fa_icon": "fas fa-chart-bar"
+        },
+        "contrasts_file": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Path to contrasts CSV file",
+          "fa_icon": "fas fa-file-csv"
+        },
+        "dge_groupby": {
+          "type": "string",
+          "default": "condition",
+          "description": "obs column used for group comparison",
+          "fa_icon": "fas fa-object-group"
+        },
+        "dge_reference": {
+          "type": "string",
+          "default": "control",
+          "description": "Reference group for DGE",
+          "fa_icon": "fas fa-balance-scale-left"
+        },
+        "dge_method": {
+          "type": "string",
+          "default": "wilcoxon",
+          "enum": [
+            "wilcoxon",
+            "t-test",
+            "t-test_overestim_var"
+          ],
+          "description": "Statistical method for DGE",
+          "fa_icon": "fas fa-calculator"
+        },
+        "dge_min_pct": {
+          "type": "number",
+          "default": 0.1,
+          "description": "Minimum fraction of expressing cells",
+          "fa_icon": "fas fa-percentage"
+        },
+        "dge_logfc_threshold": {
+          "type": "number",
+          "default": 0.25,
+          "description": "Log fold-change threshold",
+          "fa_icon": "fas fa-sliders-h"
+        },
+        "dge_pval_cutoff": {
+          "type": "number",
+          "default": 0.05,
+          "description": "Adjusted p-value cutoff",
+          "fa_icon": "fas fa-signal"
+        },
+        "dge_top_n_genes": {
+          "type": "integer",
+          "default": 100,
+          "description": "Top N genes to export per contrast",
+          "fa_icon": "fas fa-list-ol"
+        },
+        "dge_save_plots": {
+          "type": "boolean",
+          "default": true,
+          "description": "Generate DGE plots",
+          "fa_icon": "fas fa-image"
+        },
+        "dge_save_h5ad": {
+          "type": "boolean",
+          "default": false,
+          "description": "Save H5AD with DGE results",
+          "fa_icon": "fas fa-save"
+        }
+      }
+    },
+    "gsea_options": {
+      "title": "GSEA options",
+      "type": "object",
+      "description": "Parameters for gene set enrichment analysis",
+      "properties": {
+        "run_gsea": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run GSEA after DGE",
+          "fa_icon": "fas fa-route"
+        },
+        "organism": {
+          "type": "string",
+          "default": "human",
+          "enum": [
+            "human",
+            "mouse"
+          ],
+          "description": "Organism used for annotation databases",
+          "fa_icon": "fas fa-dna"
+        },
+        "gsea_top_pathways": {
+          "type": "integer",
+          "default": 10,
+          "description": "Default number of pathways to include in saved GSEA plots",
+          "fa_icon": "fas fa-list-ol"
+        },
+        "gsea_pathview_top_n": {
+          "type": "integer",
+          "default": 10,
+          "description": "Top KEGG pathways exported with pathview",
+          "fa_icon": "fas fa-project-diagram"
+        },
+        "gsea_dashboard_max_pathways": {
+          "type": "integer",
+          "default": 50,
+          "description": "Maximum pathways allowed in dashboard dynamic plots",
+          "fa_icon": "fas fa-sliders-h"
+        }
+      }
+    },
+    "slurm_options": {
+      "title": "SLURM options",
+      "type": "object",
+      "description": "Optional SLURM executor parameters",
+      "properties": {
+        "slurm_queue": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "SLURM partition/queue",
+          "fa_icon": "fas fa-server"
+        },
+        "slurm_account": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "SLURM account",
+          "fa_icon": "fas fa-user-tag"
+        }
+      }
+    },
+    "dimensionality_reduction_options": {
+      "title": "Dimensionality reduction options",
+      "type": "object",
+      "description": "Parameters for PCA and UMAP",
+      "properties": {
+        "n_pcs": {
+          "type": "integer",
+          "default": 50,
+          "description": "Number of principal components",
+          "fa_icon": "fas fa-chart-line"
+        },
+        "n_neighbors": {
+          "type": "integer",
+          "default": 15,
+          "description": "Number of neighbors for UMAP",
+          "fa_icon": "fas fa-project-diagram"
+        },
+        "umap_min_dist": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Minimum distance for UMAP",
+          "fa_icon": "fas fa-ruler"
+        }
+      }
+    },
+    "clustering_options": {
+      "title": "Clustering options",
+      "type": "object",
+      "description": "Parameters for clustering",
+      "properties": {
+        "clustering_method": {
+          "type": "string",
+          "default": "leiden",
+          "enum": [
+            "leiden",
+            "louvain"
+          ],
+          "description": "Clustering algorithm",
+          "fa_icon": "fas fa-sitemap"
+        },
+        "clustering_resolutions": {
+          "type": "string",
+          "default": "0.1,0.3,0.5,0.7,0.9",
+          "description": "Comma-separated list of clustering resolutions",
+          "fa_icon": "fas fa-sliders-h"
+        },
+        "default_clustering_resolution": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Default clustering resolution for visualization",
+          "fa_icon": "fas fa-dot-circle"
+        }
+      }
+    },
+    "annotation_options": {
+      "title": "Annotation options",
+      "type": "object",
+      "description": "Parameters for cell type annotation",
+      "properties": {
+        "run_auto_annotation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run automatic cell type annotation",
+          "fa_icon": "fas fa-tag"
+        },
+        "auto_annot_continue_on_error": {
+          "type": "boolean",
+          "default": true,
+          "description": "Continue pipeline if one annotation tool fails",
+          "fa_icon": "fas fa-life-ring"
+        },
+        "celltypist_enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable CellTypist annotation",
+          "fa_icon": "fas fa-check-circle"
+        },
+        "celltypist_models": {
+          "type": "string",
+          "default": "Immune_All_Low.pkl,Human_BoneMarrow.pkl",
+          "description": "Comma-separated CellTypist models",
+          "fa_icon": "fas fa-brain"
+        },
+        "celltypist_majority_voting": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable majority voting for CellTypist predictions",
+          "fa_icon": "fas fa-vote-yea"
+        },
+        "azimuth_enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Azimuth annotation",
+          "fa_icon": "fas fa-check-circle"
+        },
+        "azimuth_refs": {
+          "type": "string",
+          "default": "pbmcref",
+          "description": "Comma-separated Azimuth reference codes (allowed: pbmcref, bonemarrowref)",
+          "fa_icon": "fas fa-database"
+        },
+        "singler_enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable SingleR annotation",
+          "fa_icon": "fas fa-check-circle"
+        },
+        "singler_refs": {
+          "type": "string",
+          "default": "NovershternHematopoieticData",
+          "description": "Comma-separated SingleR celldex references",
+          "fa_icon": "fas fa-database"
+        },
+        "singler_prune": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable SingleR pruned labels",
+          "fa_icon": "fas fa-cut"
+        },
+        "cell_type_column": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Canonical cell type column used for pseudobulk DGE. Default: auto-detect SingleR pruned column (stable across references)",
+          "fa_icon": "fas fa-tag"
+        },
+        "sctype_enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable scType annotation",
+          "fa_icon": "fas fa-check-circle"
+        },
+        "sctype_markers_file": {
+          "type": "string",
+          "description": "Path to scType markers CSV",
+          "default": "assets/sctype_markers_mock.csv",
+          "fa_icon": "fas fa-file-csv"
+        },
+        "min_cell_type_annotated_pct": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Minimum fraction of cells that must carry a cell_type. If the canonical source annotates below this, the pipeline FAILS explicitly (no silent tool switching).",
+          "fa_icon": "fas fa-percentage"
+        },
+        "custom_cell_type_file": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional CSV with an id column (cell_id/barcode) and a cell_type column. Overrides the automatic source for matching cells (e.g. exported from the dashboard Annotation Station). Nextflow hashes its contents so -resume invalidates on change.",
+          "fa_icon": "fas fa-file-csv"
+        }
+      }
+    },
+    "dashboard_options": {
+      "title": "Interactive Dashboard options",
+      "type": "object",
+      "description": "Parameters for the interactive visualization dashboard",
+      "properties": {
+        "enable_dashboard": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable interactive dashboard launch after pipeline completion",
+          "fa_icon": "fas fa-chart-bar"
+        },
+        "dashboard_port": {
+          "type": "integer",
+          "default": 3838,
+          "description": "Port for dashboard server (default Shiny port)",
+          "fa_icon": "fas fa-network-wired"
+        },
+        "dashboard_host": {
+          "type": "string",
+          "default": "localhost",
+          "description": "Host for dashboard server",
+          "fa_icon": "fas fa-server"
+        }
+      }
+    },
+    "generic_options": {
+      "title": "Generic options",
+      "type": "object",
+      "fa_icon": "fas fa-cog",
+      "description": "Less common options for the pipeline, typically set in a config file.",
+      "properties": {
+        "publish_dir_mode": {
+          "type": "string",
+          "default": "copy",
+          "description": "Method used to save pipeline results to output directory.",
+          "fa_icon": "fas fa-copy",
+          "enum": [
+            "symlink",
+            "rellink",
+            "link",
+            "copy",
+            "copyNoFollow",
+            "move"
+          ]
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address for completion summary.",
+          "fa_icon": "fas fa-envelope",
+          "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$"
+        },
+        "email_on_fail": {
+          "type": "string",
+          "description": "Email address for completion summary, only when pipeline fails.",
+          "fa_icon": "fas fa-exclamation-triangle",
+          "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$"
+        },
+        "max_multiqc_email_size": {
+          "type": "string",
+          "description": "File size limit when attaching MultiQC reports to summary emails.",
+          "default": "25.MB",
+          "fa_icon": "fas fa-file-upload"
+        },
+        "tracedir": {
+          "type": "string",
+          "description": "Directory to keep pipeline Nextflow logs and reports.",
+          "default": "${params.outdir}/pipeline_info",
+          "fa_icon": "fas fa-cogs"
+        },
+        "validate_params": {
+          "type": "boolean",
+          "description": "Boolean whether to validate parameters against the schema at runtime",
+          "default": true,
+          "fa_icon": "fas fa-check-square"
+        },
+        "version": {
+          "type": "boolean",
+          "description": "Display version and exit",
+          "fa_icon": "fas fa-question",
+          "default": false
+        },
+        "help": {
+          "type": "boolean",
+          "description": "Display help text",
+          "fa_icon": "fas fa-question-circle",
+          "default": false
+        },
+        "config_profile_name": {
+          "type": "string",
+          "description": "Institutional config name",
+          "fa_icon": "fas fa-users-cog"
+        },
+        "config_profile_description": {
+          "type": "string",
+          "description": "Institutional config description",
+          "fa_icon": "fas fa-users-cog"
+        },
+        "custom_config_version": {
+          "type": "string",
+          "description": "Git commit id for custom Institutional configs.",
+          "default": "master",
+          "fa_icon": "fas fa-users-cog"
+        },
+        "custom_config_base": {
+          "type": "string",
+          "description": "Base directory for custom Institutional configs.",
+          "default": "https://raw.githubusercontent.com/nf-core/configs/master",
+          "fa_icon": "fas fa-users-cog"
+        },
+        "cache_base_dir": {
+          "type": "string",
+          "description": "Base/scratch directory used for pipeline caches (prefer scratch on HPC).",
+          "fa_icon": "fas fa-database"
+        },
+        "azimuth_r_lib_dir": {
+          "type": "string",
+          "description": "Directory used to cache Azimuth R libraries.",
+          "fa_icon": "fas fa-database"
+        },
+        "dashboard_conda_dir": {
+          "type": "string",
+          "description": "Directory used for the dashboard conda environment.",
+          "fa_icon": "fas fa-database"
+        },
+        "gsea_container": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional container image override for GSEA.",
+          "fa_icon": "fas fa-cube"
+        },
+        "pseudobulk_container": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional container image override for the pseudobulk DGE module.",
+          "fa_icon": "fas fa-cube"
+        },
+        "dashboard_image": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Optional container image override for the dashboard.",
+          "fa_icon": "fas fa-cube"
+        }
+      }
+    },
+    "max_job_request_options": {
+      "title": "Max job request options",
+      "type": "object",
+      "fa_icon": "fab fa-acquisitions-incorporated",
+      "description": "Set the top limit for requested resources for any single job.",
+      "properties": {
+        "max_cpus": {
+          "type": "integer",
+          "description": "Maximum number of CPUs that can be requested for any single job.",
+          "default": 16,
+          "fa_icon": "fas fa-microchip"
+        },
+        "max_memory": {
+          "type": "string",
+          "description": "Maximum amount of memory that can be requested for any single job.",
+          "default": "128.GB",
+          "fa_icon": "fas fa-memory"
+        },
+        "max_time": {
+          "type": "string",
+          "description": "Maximum amount of time that can be requested for any single job.",
+          "default": "240.h",
+          "fa_icon": "far fa-clock"
+        }
+      }
+    },
+    "pseudobulk_dge_options": {
+      "title": "Pseudobulk differential expression options",
+      "type": "object",
+      "description": "DESeq2 pseudo-bulk differential expression per cell type. Aggregates raw counts by sample x cell type (biological reference unit = sample), avoiding pseudo-replication.",
+      "fa_icon": "fas fa-chart-line",
+      "properties": {
+        "run_pseudobulk_dge": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run pseudo-bulk DESeq2 DGE per cell type",
+          "fa_icon": "fas fa-chart-line"
+        },
+        "pseudobulk_min_cells": {
+          "type": "integer",
+          "default": 10,
+          "description": "Minimum cells per sample x cell type aggregate",
+          "fa_icon": "fas fa-filter"
+        },
+        "pseudobulk_groupby": {
+          "type": "string",
+          "default": "cell_type",
+          "description": "obs column used to group aggregates (canonical cell type)",
+          "fa_icon": "fas fa-tag"
+        },
+        "pseudobulk_design": {
+          "type": "string",
+          "default": "condition",
+          "description": "DESeq2 design term (condition)",
+          "fa_icon": "fas fa-object-group"
+        },
+        "pseudobulk_control_group": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Reference condition for contrasts; defaults to dge_reference",
+          "fa_icon": "fas fa-balance-scale"
+        },
+        "pseudobulk_padj_cutoff": {
+          "type": "number",
+          "default": 0.05,
+          "description": "Adjusted p-value cutoff for significance labelling",
+          "fa_icon": "fas fa-percentage"
+        },
+        "pseudobulk_shrink": {
+          "type": "string",
+          "default": "apeglm",
+          "enum": [
+            "apeglm",
+            "ashr",
+            "normal"
+          ],
+          "description": "LFC shrinkage type used by DESeq2 lfcShrink",
+          "fa_icon": "fas fa-compress"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/definitions/input_output_options"
+    },
+    {
+      "$ref": "#/definitions/quality_control_options"
+    },
+    {
+      "$ref": "#/definitions/doublet_detection_options"
+    },
+    {
+      "$ref": "#/definitions/normalization_options"
+    },
+    {
+      "$ref": "#/definitions/integration_options"
+    },
+    {
+      "$ref": "#/definitions/dimensionality_reduction_options"
+    },
+    {
+      "$ref": "#/definitions/clustering_options"
+    },
+    {
+      "$ref": "#/definitions/annotation_options"
+    },
+    {
+      "$ref": "#/definitions/pseudobulk_dge_options"
+    },
+    {
+      "$ref": "#/definitions/dge_options"
+    },
+    {
+      "$ref": "#/definitions/gsea_options"
+    },
+    {
+      "$ref": "#/definitions/dashboard_options"
+    },
+    {
+      "$ref": "#/definitions/slurm_options"
+    },
+    {
+      "$ref": "#/definitions/generic_options"
+    },
+    {
+      "$ref": "#/definitions/max_job_request_options"
+    }
+  ]
 }

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import re
 
 import anndata as ad
@@ -31,7 +32,25 @@ def parse_args():
     parser.add_argument(
         "--cell-type-column",
         default=None,
-        help="Canonical cell type column. Default: auto-detect SingleR pruned column",
+        help="Canonical cell type column. If set, forces a single source (no auto-detect).",
+    )
+    parser.add_argument(
+        "--custom-cell-type-file",
+        default=None,
+        help=(
+            "Optional CSV with a barcode/cell_id column and a 'cell_type' column. "
+            "When provided, overrides the automatic source for the matching cells "
+            "(e.g. exported from the dashboard Annotation Station)."
+        ),
+    )
+    parser.add_argument(
+        "--min-cell-type-annotated-pct",
+        type=float,
+        default=0.5,
+        help=(
+            "Minimum fraction of cells that must carry a cell_type for the run to "
+            "succeed. If exceeded, the pipeline fails explicitly. Default: 0.5."
+        ),
     )
     return parser.parse_args()
 
@@ -123,80 +142,134 @@ def merge_df(adata, csv_path):
     }
 
 
-def resolve_cell_type_tool(config):
-    """Pick the SingleR label column (prefer '_pruned') used as canonical source."""
-    cols = list(config.get("singler", {}).get("columns", []) or [])
-    label_cols = _label_columns(cols, TOOL_PREFIX["singler"])
-    if not label_cols:
-        return None, None
-    # Prefer the pruned label column (pruning applied) for a stable, QC-filtered label
-    for label_col in label_cols:
-        pruned_col = f"{label_col}_pruned"
-        if pruned_col in cols:
-            return label_col, pruned_col
-    return label_cols[0], label_cols[0]
+def _tool_for_column(col):
+    """Return the tool name owning a merged annotation column."""
+    if col is None:
+        return None
+    for tool, prefix in TOOL_PREFIX.items():
+        if col == prefix or col.startswith(prefix):
+            return tool
+    return None
 
 
-def add_canonical_cell_type(adata, merge_report, configured):
-    """Add canonical cell_type, cell_type_agreement and cell_type_confidence columns.
+def load_custom_types(path):
+    """Load a (barcode/cell_id, cell_type) CSV into a cell_id->str mapping.
 
-    cell_type default = SingleR pruned label (column stable regardless of reference).
-    cell_type_agreement = number of tools (0-4) with a non-NA label equal to cell_type.
-    cell_type_confidence = SingleR score (for the default source) or NA otherwise.
+    Only rows with a non-empty id are kept. An explicit error is raised when either
+    required column is missing so a misnamed dashboard export fails loudly.
     """
-    single_label_col, single_pruned_col = resolve_cell_type_tool(merge_report)
+    df = pd.read_csv(path)
+    id_col = next((c for c in ("cell_id", "barcode", "cellbarcode", "barcode_id")
+                   if c in df.columns), None)
+    label_col = next((c for c in ("cell_type", "label", "annotation")
+                      if c in df.columns), None)
+    if id_col is None or label_col is None:
+        raise ValueError(
+            f"--custom-cell-type-file must contain an id column "
+            f"(cell_id/barcode) and a 'cell_type' column. Found: {list(df.columns)}"
+        )
+    df = df.loc[df[id_col].notna()].copy()
+    df[id_col] = df[id_col].astype(str).str.strip()
+    df = df[df[id_col] != ""]
+    df[label_col] = df[label_col].astype(str).str.strip()
+    return df.set_index(id_col)[label_col]
+
+
+def add_canonical_cell_type(adata, merge_report, configured, min_pct, custom_file=None):
+    """Build the canonical ``cell_type`` column and agreement/confidence metadata.
+
+    Resolution (no automatic tool switching):
+      1. ``configured`` column, when set (any source).
+      2. Default: SingleR pruned label, or its base label when pruned holds no data.
+      ``custom_file``, when provided, overrides ``cell_type`` for the matching cells.
+
+    If fewer than ``min_pct`` of cells end up annotated, the pipeline FAILS with an
+    explicit, actionable message. It never silently picks a different annotator.
+    """
+    base_col = None
+    source_tool = None
 
     if configured:
-        cell_type_col = configured
-        if cell_type_col not in adata.obs.columns:
+        if configured not in adata.obs.columns:
             raise ValueError(
-                f"--cell-type-column '{cell_type_col}' not found in merged annotations. "
+                f"--cell-type-column '{configured}' not found in merged annotations. "
                 f"Available: {list(adata.obs.columns)}"
             )
-        confidence_col = (
-            _score_column_for(cell_type_col)
-            if cell_type_col.startswith(TOOL_PREFIX["singler"])
-            else None
-        )
-        source_tool = next(
-            (
-                t
-                for t, p in TOOL_PREFIX.items()
-                if cell_type_col == p or cell_type_col.startswith(p)
-            ),
-            None,
-        )
-    elif single_label_col is not None:
-        cell_type_col = single_pruned_col
-        confidence_col = _score_column_for(single_label_col)
-        source_tool = "singler"
+        base_col = configured
+        source_tool = _tool_for_column(configured)
     else:
-        cell_type_col = None
-        confidence_col = None
-        source_tool = None
+        cols = merge_report.get("singler", {}).get("columns", []) or []
+        label_cols = _label_columns(cols, TOOL_PREFIX["singler"])
+        if label_cols:
+            base_col = label_cols[0]
+            pruned = f"{base_col}_pruned"
+            if pruned in cols and adata.obs[pruned].notna().any():
+                base_col = pruned
+            source_tool = "singler"
 
-    if cell_type_col is not None:
-        adata.obs["cell_type"] = adata.obs[cell_type_col]
+    if base_col is None:
+        raise ValueError(
+            "No default cell type source found (SingleR produced no label columns). "
+            "Specify --cell-type-column or --custom-cell-type-file."
+        )
 
-    # Per-tool main label columns
+    adata.obs["cell_type"] = adata.obs[base_col].astype("string").copy()
+
+    n_custom = 0
+    if custom_file:
+        custom = load_custom_types(custom_file)
+        if len(custom) > 0:
+            inter = adata.obs.index.astype(str).intersection(custom.index)
+            if len(inter) == 0:
+                raise ValueError(
+                    f"--custom-cell-type-file '{custom_file}' matched no cells. "
+                    "Check that its id column matches the H5AD obs_names."
+                )
+            adata.obs.loc[inter, "cell_type"] = custom.loc[inter].values
+            n_custom = int(len(inter))
+        # An empty file (0 rows) means no override was supplied.
+
+    annotated = int(adata.obs["cell_type"].notna().sum())
+    total = adata.n_obs
+    final_pct = annotated / total if total else 0.0
+
+    if final_pct < min_pct:
+        remedy = (
+            f"Fix the '{base_col}' annotation ({source_tool}) or override with "
+            f"--cell-type-column (another source) or --custom-cell-type-file."
+        )
+        if custom_file:
+            remedy = (
+                f"Custom file matched {n_custom} cells and the base source "
+                f"'{base_col}' is missing labels for the rest. {remedy}"
+            )
+        raise ValueError(
+            f"Only {round(final_pct * 100, 2)}% of {total} cells have a cell_type "
+            f"(< min_cell_type_annotated_pct={min_pct}). {remedy}"
+        )
+
+    chose_custom = n_custom > 0
+    chosen_col = "custom_cell_type_file" if chose_custom else base_col
+    chosen_tool = "custom" if chose_custom else source_tool
+
+    # Confidence from the source score when the source produced one.
+    confidence_col = None
+    score_base = base_col[:-len("_pruned")] if base_col.endswith("_pruned") else base_col
+    candidate = _score_column_for(score_base)
+    if candidate in adata.obs.columns:
+        confidence_col = candidate
+        adata.obs["cell_type_confidence"] = adata.obs[candidate]
+
+    # Per-tool main label columns used to compute agreement against the canonical.
     tool_labels = {}
     for tool, prefix in TOOL_PREFIX.items():
-        if tool == "singler" and source_tool == "singler":
-            # Compare against the exact canonical value (same as default source)
-            ref_col = cell_type_col if cell_type_col else (single_label_col or "")
-        else:
-            cols = merge_report.get(tool, {}).get("columns", []) or []
-            labels = _label_columns(cols, prefix)
-            ref_col = labels[0] if labels else None
+        cols = merge_report.get(tool, {}).get("columns", []) if tool in merge_report else []
+        labels = _label_columns(cols, prefix)
+        ref_col = labels[0] if labels else None
         if ref_col and ref_col in adata.obs.columns:
             tool_labels[tool] = ref_col
 
-    canonical = (
-        adata.obs["cell_type"]
-        if cell_type_col
-        else pd.Series(pd.NA, index=adata.obs.index)
-    )
-
+    canonical = adata.obs["cell_type"]
     normalized_canonical = canonical.map(_normalize_label)
     agreement = pd.Series(0, index=adata.obs.index, dtype=int)
     annotated_count = pd.Series(0, index=adata.obs.index, dtype=int)
@@ -214,30 +287,26 @@ def add_canonical_cell_type(adata, merge_report, configured):
     adata.obs["cell_type_agreement"] = agreement
     adata.obs["n_tools_annotated"] = annotated_count
 
-    if confidence_col and confidence_col in adata.obs.columns:
-        adata.obs["cell_type_confidence"] = adata.obs[confidence_col]
+    mean_agreement = (
+        agreement[canonical.notna()].mean() if annotated else 0.0
+    )
 
     info = {
-        "cell_type_column": cell_type_col,
+        "cell_type_column": base_col,
         "cell_type_source_tool": source_tool,
+        "cell_type_used": chosen_col,
+        "cell_type_used_tool": chosen_tool,
         "cell_type_confidence_column": confidence_col,
+        "custom_cell_type_file": os.path.basename(custom_file) if custom_file else None,
+        "n_custom_assigned": n_custom,
         "tools_compared": {t: c for t, c in tool_labels.items()},
-    }
-    if cell_type_col is not None:
-        annotated = adata.obs["cell_type"].notna().sum()
-        total = adata.n_obs
-        mean_agreement = (
-            agreement[adata.obs["cell_type"].notna()].mean() if annotated else 0.0
-        )
-        info["percent_annotated"] = round(annotated / total * 100, 2) if total else 0.0
-        info["percent_agreement"] = round(
+        "min_cell_type_annotated_pct": min_pct,
+        "percent_annotated": round(final_pct * 100, 2) if total else 0.0,
+        "percent_agreement": round(
             float(mean_agreement if mean_agreement == mean_agreement else 0.0), 4
-        )
-        info["n_cells_no_cell_type"] = int(total - annotated)
-    else:
-        info["percent_annotated"] = 0.0
-        info["percent_agreement"] = 0.0
-        info["warning"] = "No SingleR annotation found; cell_type not created"
+        ),
+        "n_cells_no_cell_type": int(total - annotated),
+    }
     return info
 
 
@@ -261,7 +330,13 @@ def main():
 
     columns_added = {k: v["columns"] for k, v in merge_report.items()}
 
-    cell_type_info = add_canonical_cell_type(adata, merge_report, args.cell_type_column)
+    cell_type_info = add_canonical_cell_type(
+        adata,
+        merge_report,
+        args.cell_type_column,
+        args.min_cell_type_annotated_pct,
+        args.custom_cell_type_file,
+    )
 
     adata.uns["auto_annotation_summary"] = {
         "status": {k: bool(v.get("success", False)) for k, v in status.items()},

@@ -188,6 +188,10 @@ workflow SCANNEX {
             sctype_status_ch = empty_status_json
         }
 
+        def custom_cell_type_ch = params.custom_cell_type_file
+            ? Channel.fromPath(params.custom_cell_type_file, checkIfExists: true)
+            : Channel.fromPath("${projectDir}/assets/empty_custom_cell_types.csv", checkIfExists: true)
+
         AUTO_ANNOT_SUMMARIZE (
             base_annotation_h5ad.map { h5ad -> h5ad },
             celltypist_annotations_ch,
@@ -197,7 +201,8 @@ workflow SCANNEX {
             azimuth_annotations_ch,
             azimuth_status_ch,
             singler_annotations_ch,
-            singler_status_ch
+            singler_status_ch,
+            custom_cell_type_ch
         )
 
         annotated_h5ad = AUTO_ANNOT_SUMMARIZE.out.h5ad
@@ -206,13 +211,13 @@ workflow SCANNEX {
     //
     // STEP 6b: Pseudobulk DGE (DESeq2, per cell type) - Paper-ready contrasting
     //
-    def pseudobulk_tables = Channel.empty()
-    def pseudobulk_status_json = Channel.empty()
+    def pb_tables_ch = Channel.empty()
+    def pb_status_ch = Channel.empty()
     if (params.run_pseudobulk_dge) {
         PSEUDOBULK_BUILD ( annotated_h5ad )
         PSEUDOBULK_DGE  ( PSEUDOBULK_BUILD.out.counts, PSEUDOBULK_BUILD.out.metadata )
-        pseudobulk_tables = PSEUDOBULK_DGE.out.tables
-        pseudobulk_status_json = PSEUDOBULK_DGE.out.status_json
+        pb_tables_ch = PSEUDOBULK_DGE.out.tables
+        pb_status_ch = PSEUDOBULK_DGE.out.status_json
     }
 
     //
@@ -230,7 +235,7 @@ workflow SCANNEX {
             def dge_contrast_tables
             if (params.run_pseudobulk_dge) {
                 // GSEA prefers pseudo-bulk contrast tables (biological replication respected)
-                dge_contrast_tables = pseudobulk_tables
+                dge_contrast_tables = pb_tables_ch
                     .map { csv ->
                         def contrast = csv.baseName.replaceFirst(/_results$/, '')
                         tuple(contrast, csv)
@@ -280,8 +285,8 @@ workflow SCANNEX {
     h5ad = final_output
     qc_results = QUALITY_CONTROL.out.qc_dir
     standard_results = STANDARD_PROCESSING.out.results_dir
-    pseudobulk_tables = pseudobulk_tables
-    pseudobulk_status = pseudobulk_status_json
+    pseudobulk_tables = pb_tables_ch
+    pseudobulk_status = pb_status_ch
 }
 
 /*

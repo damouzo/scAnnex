@@ -62,16 +62,28 @@ slugify <- function(x) {
 }
 
 load_ref <- function(ref_name) {
-    if (ref_name == "BlueprintEncodeData") {
-        return(celldex::BlueprintEncodeData())
+    # Resolve any celldex data constructor by name so valid dataset names are
+    # never rejected by a hard-coded whitelist (e.g. NovershternHematopoieticData).
+    fun <- tryCatch(
+        getExportedValue("celldex", ref_name),
+        error = function(e) NULL
+    )
+    if (is.function(fun)) {
+        return(fun())
     }
-    if (ref_name == "HumanPrimaryCellAtlasData") {
-        return(celldex::HumanPrimaryCellAtlasData())
+    # Fallback map for datasets not exported at top level of celldex.
+    aliases <- c(
+        Blueprint = "BlueprintEncodeData",
+        BlueprintEncode = "BlueprintEncodeData"
+    )
+    alias_fun <- tryCatch(
+        getExportedValue("celldex", aliases[[ref_name]]),
+        error = function(e) NULL
+    )
+    if (is.function(alias_fun)) {
+        return(alias_fun())
     }
-    if (ref_name == "MonacoImmuneData") {
-        return(celldex::MonacoImmuneData())
-    }
-    stop(sprintf("Unsupported reference: %s", ref_name))
+    stop(sprintf("Unsupported or unavailable reference: %s", ref_name))
 }
 
 status <- list(tool = "singler", success = TRUE, refs = list(), errors = list())
@@ -185,6 +197,23 @@ for (ref_name in refs) {
 if (is.null(results)) {
     results <- data.frame(cell_id = all_cells, stringsAsFactors = FALSE)
     status$success <- FALSE
+}
+
+# Honesty check: any reference whose primary label column is entirely NA must be
+# reported as failed, never masked as a silent success.
+if (ncol(results) > 1) {
+    label_cols <- setdiff(colnames(results), c("cell_id"))
+    score_like <- grepl("_score$|_delta_next$", label_cols)
+    pruned_like <- grepl("_pruned$", label_cols)
+    # Primary label columns exclude score/delta/next and pruned companions.
+    primary_cols <- label_cols[!score_like & !pruned_like]
+    for (col in primary_cols) {
+        if (all(is.na(results[[col]]) | results[[col]] == "")) {
+            status$success <- FALSE
+            msg <- sprintf("No labels produced for column %s (all NA)", col)
+            status$errors[[length(status$errors) + 1]] <- msg
+        }
+    }
 }
 
 write.csv(results, opt$output, row.names = FALSE, quote = TRUE)

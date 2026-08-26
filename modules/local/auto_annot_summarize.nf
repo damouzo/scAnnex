@@ -15,6 +15,7 @@ process AUTO_ANNOT_SUMMARIZE {
     path(azimuth_status)
     path(singler_annotations)
     path(singler_status)
+    path(custom_cell_type)
 
     output:
     path "auto_annotated_global.h5ad"         , emit: h5ad
@@ -40,6 +41,8 @@ process AUTO_ANNOT_SUMMARIZE {
         --azimuth-status ${azimuth_status} \
         --singler ${singler_annotations} \
         --singler-status ${singler_status} \
+        --custom-cell-type-file ${custom_cell_type} \
+        --min-cell-type-annotated-pct ${params.min_cell_type_annotated_pct} \
         ${cell_type_col} \
         ${args}
 

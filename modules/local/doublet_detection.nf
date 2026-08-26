@@ -35,6 +35,7 @@ process DOUBLET_DETECTION {
         --plot-prefix ${prefix} \
         --attrition-output ${prefix}_doublet_attrition.json \
         --expected-doublet-rate ${doublet_rate} \\
+        --min-cells-doublet ${params.doublet_min_cells} \\
         ${remove_doublets} \\
         ${save_attrition} \\
         ${args}
