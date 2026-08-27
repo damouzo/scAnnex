@@ -236,6 +236,7 @@ workflow SCANNEX {
             if (params.run_pseudobulk_dge) {
                 // GSEA prefers pseudo-bulk contrast tables (biological replication respected)
                 dge_contrast_tables = pb_tables_ch
+                    .flatten()
                     .map { csv ->
                         def contrast = csv.baseName.replaceFirst(/_results$/, '')
                         tuple(contrast, csv)

@@ -123,6 +123,27 @@ results_log <- list()
 n_run <- 0L
 skipped <- 0L
 
+# Defensive guard: if two distinct contrast ids slugify to the same file id,
+# the module (and downstream GSEA) would silently overwrite one another.
+# Fail loudly instead of losing data.
+seen_file_ids <- list()
+for (ct in sort(unique(meta[[opt$groupby]]))) {
+  idx_ct <- meta[[opt$groupby]] == ct
+  meta_ct <- meta[idx_ct, , drop = FALSE]
+  ct_present <- setdiff(unique(meta_ct[[opt$condition_col]]), control)
+  for (cond in sort(ct_present)) {
+    contrast_id <- paste0(cond, "_vs_", control, "__", ct)
+    file_id <- slugify(contrast_id)
+    if (file_id %in% names(seen_file_ids)) {
+      stop(sprintf(
+        "Pseudo-bulk contrast file-id collision: '%s' and '%s' both slugify to '%s'. ",
+        seen_file_ids[[file_id]], contrast_id, file_id
+      ))
+    }
+    seen_file_ids[[file_id]] <- contrast_id
+  }
+}
+
 for (ct in sort(unique(meta[[opt$groupby]]))) {
   idx_ct <- meta[[opt$groupby]] == ct
   meta_ct <- meta[idx_ct, , drop = FALSE]
