@@ -8,7 +8,9 @@ Verifies:
   (c) min_cells filter drops small aggregates as integer raw sums,
   (d) aggregation uses raw integer counts, no normalization/pre-scaling,
   (e) replicate_group_size_condition (used by the DGE guard to trigger
-      SKIP_INSUFFICIENT_REPLICATES) is 1 when a group has a single sample.
+      SKIP_INSUFFICIENT_REPLICATES) is 1 when a group has a single sample,
+  (f) global mode (collapse_celltypes=True) produces one 'ALL' aggregate per
+      sample, i.e. n_cell_types == 1 and cell_type column == 'ALL'.
 
 Run with:  python tests/test_pseudobulk.py
 Requires:  anndata, numpy, pandas (and scanpy to import the module).
@@ -89,11 +91,34 @@ def main():
     assert (single["replicate_group_size_condition"] == 1).all(), \
         "single-sample group must report replicate size 1 (triggers SKIP)"
 
+    # (f) global mode collapses cell types into a single 'ALL' group per sample
+    g_counts, g_meta, g_summary = build_pseudobulk(adata, min_cells=1, collapse_celltypes=True)
+    assert set(g_meta["cell_type"].unique()) == {"ALL"}, \
+        "global mode must label every aggregate cell_type == 'ALL'"
+    assert g_meta["cell_type"].nunique() == 1, \
+        "global mode must produce exactly one cell type group"
+    assert g_summary["collapse_celltypes"] is True, \
+        "summary must record collapse_celltypes=True"
+    n_samples = adata.obs["sample_id"].nunique()
+    assert len(g_meta) == n_samples, \
+        f"global mode must yield one aggregate per sample (expected {n_samples}, got {len(g_meta)})"
+    # The global aggregate is the sum of all per-cell-type aggregates for a sample,
+    # so total counts across ALL cells must be preserved.
+    global_col = f"C1::ALL"
+    assert global_col in g_counts.columns, f"missing global aggregate column {global_col}"
+    m = adata.obs["sample_id"] == "C1"
+    np.testing.assert_allclose(
+        g_counts[global_col].values,
+        np.asarray(adata.layers["counts"])[m].sum(axis=0),
+        err_msg="global aggregate must equal the raw per-cell sum for the sample",
+    )
+
     print("pseudobulk_build mock test PASSED")
     print(f"  aggregates: {counts_df.shape[1]}")
     print(f"  cell types: {meta_df['cell_type'].unique().tolist()}")
     print(f"  samples:    {meta_df['sample_id'].nunique()}")
     print(f"  conditions: {meta_df['condition'].unique().tolist()}")
+    print(f"  global aggregates: {len(g_meta)} (cell_type=ALL)")
 
 
 if __name__ == "__main__":

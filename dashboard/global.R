@@ -1043,6 +1043,8 @@ DEFAULT_QC_DIR <- ""
 DEFAULT_MERGED_H5AD <- ""
 DEFAULT_DGE_DIR <- ""
 DEFAULT_GSEA_DIR <- ""
+DEFAULT_PSEUDOBULK_DIR <- ""
+DEFAULT_PSEUDOBULK_GLOBAL_DIR <- ""
 DEFAULT_SAMPLE_IDS <- character(0)
 DEFAULT_SAMPLE_H5AD_FILES <- setNames(character(0), character(0))
 
@@ -1113,6 +1115,20 @@ if (dir.exists(DEFAULT_DATA_PATH)) {
   if (dir.exists(dge_candidate)) {
     DEFAULT_DGE_DIR <- dge_candidate
     message(sprintf("  Auto-detected DGE dir: %s", DEFAULT_DGE_DIR))
+  }
+
+  # Pseudobulk DGE (DESeq2, per cell type)
+  pseudobulk_candidate <- file.path(DEFAULT_DATA_PATH, "pseudobulk_dge", "pseudobulk_dge")
+  if (dir.exists(pseudobulk_candidate)) {
+    DEFAULT_PSEUDOBULK_DIR <- pseudobulk_candidate
+    message(sprintf("  Auto-detected pseudobulk DGE dir: %s", DEFAULT_PSEUDOBULK_DIR))
+  }
+
+  # Pseudobulk DGE (DESeq2, global - collapsed across cell types)
+  pseudobulk_global_candidate <- file.path(DEFAULT_DATA_PATH, "pseudobulk_dge", "global")
+  if (dir.exists(pseudobulk_global_candidate)) {
+    DEFAULT_PSEUDOBULK_GLOBAL_DIR <- pseudobulk_global_candidate
+    message(sprintf("  Auto-detected pseudobulk global DGE dir: %s", DEFAULT_PSEUDOBULK_GLOBAL_DIR))
   }
 
   # GSEA directory

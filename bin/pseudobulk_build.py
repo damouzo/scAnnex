@@ -15,6 +15,14 @@ Usage:
         --counts-out pseudobulk_counts.tsv \\
         --metadata-out pseudobulk_metadata.csv \\
         --summary-out pseudobulk_build_summary.json
+
+    # Global (collapse cell types): aggregate per sample only, cell_type='ALL'
+    python pseudobulk_build.py \\
+        --input auto_annotated_global.h5ad \\
+        --counts-out pseudobulk_global_counts.tsv \\
+        --metadata-out pseudobulk_global_metadata.csv \\
+        --summary-out pseudobulk_global_build_summary.json \\
+        --collapse-celltypes
 """
 
 import argparse
@@ -74,6 +82,18 @@ def parse_args():
         default="condition",
         help="Column identifying the experimental condition",
     )
+    collapse_group = parser.add_mutually_exclusive_group()
+    collapse_group.add_argument(
+        "--collapse-celltypes",
+        action="store_true",
+        help="Collapse all cell types into a single 'ALL' group per sample (global pseudo-bulk)",
+    )
+    collapse_group.add_argument(
+        "--global",
+        action="store_true",
+        dest="collapse_celltypes",
+        help="Alias for --collapse-celltypes",
+    )
     return parser.parse_args()
 
 
@@ -95,8 +115,14 @@ def build_pseudobulk(
     groupby="cell_type",
     sample_col="sample_id",
     condition_col="condition",
+    collapse_celltypes=False,
 ):
     """Aggregate raw counts per sample x cell type.
+
+    When ``collapse_celltypes`` is True the cell-type dimension is ignored and a
+    single 'ALL' group is built per sample (global pseudo-bulk). This mixes
+    expression and cell-composition signal and is complementary (not a
+    substitute) to the per-cell-type analysis.
 
     Returns (counts_df, meta_df, summary). Values are integer raw sums and are
     never normalized/log-transformed (DESeq2 performs its own normalization).
@@ -120,6 +146,8 @@ def build_pseudobulk(
     sample_ids = adata.obs[sample_col].astype(str).values
     conditions = adata.obs[condition_col].astype(str).values
     cell_types = adata.obs[groupby].astype(str).values
+    if collapse_celltypes:
+        cell_types = np.full(len(cell_types), "ALL")
 
     valid = (
         ~pd.isna(adata.obs[sample_col].values)
@@ -127,6 +155,12 @@ def build_pseudobulk(
         & ~pd.isna(adata.obs[groupby].values)
         & (adata.obs[groupby].astype(str).str.strip() != "")
     )
+    if collapse_celltypes:
+        # In global mode only missing sample/condition are grounds for dropping;
+        # an absent cell_type no longer blocks aggregation.
+        valid = (~pd.isna(adata.obs[sample_col].values)) & (
+            ~pd.isna(adata.obs[condition_col].values)
+        )
     n_dropped = int((~valid).sum())
     if n_dropped:
         logger.warning(
@@ -205,6 +239,7 @@ def build_pseudobulk(
         "n_aggregates": len(aggregate_keys),
         "min_cells": min_cells,
         "groupby": groupby,
+        "collapse_celltypes": bool(collapse_celltypes),
         "n_cells_dropped_no_metadata": n_dropped,
         "n_cell_types": int(meta_df["cell_type"].nunique()),
         "n_samples": int(meta_df["sample_id"].nunique()),
@@ -225,6 +260,7 @@ def main():
         groupby=args.groupby,
         sample_col=args.sample_col,
         condition_col=args.condition_col,
+        collapse_celltypes=args.collapse_celltypes,
     )
     counts_df.to_csv(args.counts_out, sep="\t")
     meta_df.to_csv(args.metadata_out, index=False)

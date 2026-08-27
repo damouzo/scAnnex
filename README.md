@@ -51,8 +51,8 @@ scAnnex automates the complete workflow for single-cell RNA-seq analysis:
 - **Clustering** — Multi-resolution Leiden clustering
 - **Cell Annotation** — CellTypist + Azimuth (bone marrow) + SingleR (Novershtern) + scType
 - **Annotation Station** — Define cell types your way with rule-based annotation
-- **Differential Gene Expression** — Pseudo-bulk DESeq2 per cell type (paper-ready, avoids pseudo-replication) plus Wilcoxon cluster markers
-- **Gene Set Enrichment Analysis** — GSEA on pseudo-bulk contrast tables
+- **Differential Gene Expression** — Pseudo-bulk DESeq2 per cell type and global plus exploratory Wilcoxon cluster markers
+- **Gene Set Enrichment Analysis** — GSEA on pseudo-bulk contrast tables (per cell type & global)
 
 
 ## Quick Start
@@ -150,11 +150,11 @@ Choose the right execution profile for your environment:
 | `--azimuth_refs` | Azimuth reference (bone marrow) | `bonemarrowref` |
 | `--singler_refs` | SingleR reference | `NovershternHematopoieticData` |
 
-### Pseudobulk DGE (DESeq2, per cell type)
+### Pseudobulk DGE (DESeq2)
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `--run_pseudobulk_dge` | Run pseudo-bulk DESeq2 DGE per cell type | `true` |
+| `--run_pseudobulk_dge` | Run pseudo-bulk DESeq2 DGE (per cell type and global) | `true` |
 | `--pseudobulk_min_cells` | Min cells per sample x cell type aggregate | `10` |
 | `--pseudobulk_groupby` | obs column for aggregates | `cell_type` |
 | `--pseudobulk_control_group` | Reference condition (defaults to `dge_reference`) | `null` |
@@ -182,13 +182,18 @@ Explore your data in real time. No coding required.
 
 **Clustering & UMAP**
 - Interactive scatter plots with WebGL
-- Color by any metadata or clustering
+- Color by curated metadata, QC metrics and per-tool annotations (grouped) — low-confidence pruned cells shown as "Unknown"
 - Zoom, pan, export
 
 **Gene Expression**
 - Search any gene
 - Overlay expression on UMAP
 - See distribution instantly
+
+**Differential Expression (DGE) & GSEA**
+- Unified contrast selector grouping pseudo-bulk (per cell type & global) and exploratory Wilcoxon contrasts
+- Volcano plots with balanced LFC + significance gene labelling
+- GSEA dotplot, ridgeplot, running score and Pathview for GO/KEGG/Reactome, per cell type & global
 
 **Annotation Station**
 - Define cell types with simple rules

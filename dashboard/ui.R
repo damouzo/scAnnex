@@ -34,7 +34,8 @@ ui <- page_navbar(
         code_font   = font_google("Source Code Pro")
     ),
     header = tags$head(
-        tags$link(rel = "stylesheet", type = "text/css", href = "scannex.css")
+        tags$link(rel = "stylesheet", type = "text/css", href = "scannex.css"),
+        tags$link(rel = "icon", type = "image/png", href = "Logo.png")
     ),
     window_title = "scAnnex Dashboard",
     id = "main_navbar",
@@ -190,6 +191,8 @@ ui <- page_navbar(
                     selectInput("umap_color_by", "Color by:",
                                 choices = c("batch", "sample_id", "condition"),
                                 selected = "batch"),
+                    helpText("Cells with no label (e.g. low-confidence SingleR) appear as 'Unknown'. ",
+                             "Cell type is currently a SingleR placeholder; multi-tool consensus is pending."),
                     numericInput("umap_point_size", "Point size:",
                                  value = 3, min = 0.5, max = 20, step = 0.5),
                     numericInput("umap_opacity", "Opacity:",
@@ -452,16 +455,17 @@ ui <- page_navbar(
                         "<li>Normalisation, PCA, integration (Harmony)</li>",
                         "<li>Clustering (Leiden) &amp; UMAP embedding</li>",
                         "<li>Automated annotation: scType, CellTypist, SingleR, Azimuth</li>",
-                        "<li>Differential expression (Wilcoxon rank-sum)</li>",
+                        "<li>Differential expression — Wilcoxon rank-sum (cell-level, exploratory)</li>",
+                        "<li>Pseudobulk differential expression (DESeq2) — per cell type &amp; global</li>",
                         "<li>Gene set enrichment (GSEA): GO BP/MF/CC, KEGG, Reactome</li>",
                         "</ul>",
                         "<h5>Dashboard tabs</h5>",
                         "<ul>",
                         "<li><strong>Overview:</strong> Multi-sample QC summary, KPI cards, density distributions</li>",
                         "<li><strong>QC by Sample:</strong> Per-sample QC metrics, thresholds, before/after plots</li>",
-                        "<li><strong>UMAPs:</strong> Interactive UMAP with customisable colouring (categorical &amp; continuous)</li>",
+                        "<li><strong>UMAPs:</strong> Interactive UMAP with customisable colouring by curated metadata, QC metrics and per-tool annotations; low-confidence cells shown as 'Unknown'</li>",
                         "<li><strong>Gene Expression:</strong> Single gene gradient or gene-set scoring; top-N cell highlighting</li>",
-                        "<li><strong>DGE:</strong> Volcano plots with balanced LFC+significance gene labelling</li>",
+                        "<li><strong>DGE:</strong> Volcano plots from unified contrasts (pseudobulk per cell type, pseudobulk global, Wilcoxon)</li>",
                         "<li><strong>GSEA:</strong> Dotplot, Ridgeplot, Running-score, Pathview (KEGG), Results table</li>",
                         "<li><strong>Annotation Station:</strong> Custom cluster-to-label rules with H5AD export</li>",
                         "</ul>",
@@ -473,7 +477,7 @@ ui <- page_navbar(
                         "Nextflow DSL2 pipeline</a>",
                         "</p>",
                         "<p class='text-muted' style='font-size:0.85rem;'>",
-                        "<em>scAnnex v1.0.0 &nbsp;|&nbsp; Nextflow DSL2 &nbsp;+&nbsp; Python/Scanpy &nbsp;+&nbsp; R/Shiny/bslib</em></p>"
+                        "<em>Nextflow DSL2 &nbsp;+&nbsp; Python/Scanpy &nbsp;+&nbsp; R/Shiny/bslib &nbsp;+&nbsp; DESeq2</em></p>"
                     ))
                 )
             )

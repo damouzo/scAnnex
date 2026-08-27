@@ -229,3 +229,44 @@ body {
     .nav-label-long { display: inline; }
     .nav-label-short { display: none; }
 }
+
+/* ── Long contrast labels (DGE / GSEA): wrap selected item and options ───── */
+#dge_contrast_select + .selectize-control.single .selectize-input,
+#gsea_contrast_select + .selectize-control.single .selectize-input {
+    height: auto;
+    min-height: 38px;
+    white-space: normal !important;
+}
+
+#dge_contrast_select + .selectize-control.single .selectize-input > .item,
+#gsea_contrast_select + .selectize-control.single .selectize-input > .item {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: normal !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    box-sizing: border-box;
+    padding: 2px 20px 2px 0;
+}
+
+.selectize-dropdown-content .option {
+    white-space: normal !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+
+/* Hide search input for these short contrast lists so the wrapped .item stays visible. */
+#dge_contrast_select + .selectize-control.single .selectize-input > input,
+#gsea_contrast_select + .selectize-control.single .selectize-input > input {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    border: 0 !important;
+}

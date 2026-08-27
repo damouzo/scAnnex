@@ -18,7 +18,9 @@ include { INTEGRATE_HARMONYPY     } from '../modules/local/integrate_harmonypy'
 include { MERGE_SAMPLES           } from '../modules/local/merge_samples'
 include { DIFFERENTIAL_EXPRESSION } from '../modules/local/differential_expression'
 include { PSEUDOBULK_BUILD        } from '../modules/local/pseudobulk_dge'
+include { PSEUDOBULK_GLOBAL_BUILD } from '../modules/local/pseudobulk_dge'
 include { PSEUDOBULK_DGE          } from '../modules/local/pseudobulk_dge'
+include { PSEUDOBULK_GLOBAL_DGE   } from '../modules/local/pseudobulk_dge'
 include { GSEA                    } from '../modules/local/gsea'
 include { LAUNCH_DASHBOARD        } from '../modules/local/launch_dashboard'
 
@@ -209,15 +211,24 @@ workflow SCANNEX {
     }
 
     //
-    // STEP 6b: Pseudobulk DGE (DESeq2, per cell type) - Paper-ready contrasting
+    // STEP 6b: Pseudobulk DGE (DESeq2, per cell type + global) - Paper-ready contrasting
     //
     def pb_tables_ch = Channel.empty()
     def pb_status_ch = Channel.empty()
     if (params.run_pseudobulk_dge) {
         PSEUDOBULK_BUILD ( annotated_h5ad )
         PSEUDOBULK_DGE  ( PSEUDOBULK_BUILD.out.counts, PSEUDOBULK_BUILD.out.metadata )
+
+        // Global pseudo-bulk: collapse cell types into a single 'ALL' group per
+        // sample. Complements (does not replace) the per-cell-type contrasts.
+        // Published under pseudobulk_dge/global and chained into GSEA below.
+        PSEUDOBULK_GLOBAL_BUILD ( annotated_h5ad )
+        PSEUDOBULK_GLOBAL_DGE  ( PSEUDOBULK_GLOBAL_BUILD.out.counts, PSEUDOBULK_GLOBAL_BUILD.out.metadata )
+
         pb_tables_ch = PSEUDOBULK_DGE.out.tables
+            .concat( PSEUDOBULK_GLOBAL_DGE.out.tables )
         pb_status_ch = PSEUDOBULK_DGE.out.status_json
+            .concat( PSEUDOBULK_GLOBAL_DGE.out.status_json )
     }
 
     //

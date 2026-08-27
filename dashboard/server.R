@@ -20,22 +20,90 @@ server <- function(input, output, session) {
     umap_color_label_map = list()
   )
 
-  sanitize_color_name <- function(x) {
-    out <- x
-    out <- gsub("^auto_annot_", "", out)
-    out <- gsub("^celltypist_", "celltypist ", out)
-    out <- gsub("^singler_", "singler ", out)
-    out <- gsub("^azimuth_", "azimuth ", out)
-    out <- gsub("^sctype", "sctype", out)
-    out <- gsub("_score$", " score", out)
-    out <- gsub("_delta_next$", " delta", out)
-    out <- gsub("_pruned$", " pruned", out)
-    out <- gsub("_l1$", " l1", out)
-    out <- gsub("_l2$", " l2", out)
-    out <- gsub("_", " ", out)
-    out <- gsub("\\bpkl\\b", "PKL", out, ignore.case = TRUE)
-    out <- trimws(out)
-    ifelse(out == "", x, out)
+  # Curated "Color by" whitelist grouped into sections with human-readable labels.
+  # Only columns listed here appear in the UMAP colour selector, which avoids the
+  # name-vs-value confusion of the raw annotation columns and de-duplicates
+  # azimuth main (covered by _l2) and singler raw (covered by _pruned). NA values
+  # are cast to "Unknown" when plotting (handled in the renderPlotly below).
+  umap_color_spec <- list(
+    "Metadata" = list(
+      sample_id = "Sample / Sample ID",
+      batch     = "Batch",
+      condition = "Condition",
+      leiden    = "Leiden (final)"
+    ),
+    "QC (diagnostic)" = list(
+      n_genes_by_counts = "Genes per cell",
+      total_counts      = "Total counts",
+      pct_counts_mt     = "% Mitochondrial",
+      doublet_score     = "Doublet score"
+    ),
+    "CellTypist" = list(
+      auto_annot_celltypist_immune_all_low_pkl          = "Immune-All-Low",
+      auto_annot_celltypist_immune_all_low_pkl_score     = "Immune-All-Low score",
+      auto_annot_celltypist_adult_chspcs_illumina_pkl    = "Adult cHSPCs-Illumina",
+      auto_annot_celltypist_adult_chspcs_illumina_pkl_score = "Adult cHSPCs-Illumina score"
+    ),
+    "scType" = list(
+      auto_annot_sctype               = "scType label",
+      auto_annot_sctype_score         = "scType score"
+    ),
+    "Azimuth" = list(
+      auto_annot_azimuth_bonemarrowref_l1 = "Azimuth bone-marrow L1",
+      auto_annot_azimuth_bonemarrowref_l2 = "Azimuth bone-marrow L2"
+    ),
+    "SingleR" = list(
+      auto_annot_singler_novershternhematopoieticdata_pruned = "SingleR Novershtern (pruned)",
+      auto_annot_singler_novershternhematopoieticdata_score  = "SingleR score"
+    ),
+    "Consensus (placeholder*)" = list(
+      cell_type            = "Cell type (SingleR placeholder)",
+      cell_type_confidence = "Cell type confidence"
+    )
+  )
+
+  # Build an optgrouped choices list (section -> labelled raw column values) from
+  # the columns actually present in the loaded metadata.
+  build_umap_choices <- function(available_cols) {
+    out <- list()
+    for (grp in names(umap_color_spec)) {
+      mapping <- umap_color_spec[[grp]]
+      keep <- intersect(names(mapping), available_cols)
+      if (length(keep) > 0) {
+        lab <- unlist(mapping[keep], use.names = FALSE)
+        out[[grp]] <- stats::setNames(keep, lab)
+      }
+    }
+    out
+  }
+
+  # Build the whitelisted color columns and their human-readable label map once.
+  # Shared by the startup observer and the save-annotation reload block so the
+  # whitelist/labels never drift between the two.
+  build_umap_state <- function(available_cols) {
+    choices <- intersect(
+      unique(unlist(lapply(umap_color_spec, names))),
+      available_cols
+    )
+    label_map <- list()
+    for (grp in names(umap_color_spec)) {
+      for (col in names(umap_color_spec[[grp]])) {
+        if (col %in% choices) {
+          label_map[[col]] <- umap_color_spec[[grp]][[col]]
+        }
+      }
+    }
+    list(choices = choices, label_map = label_map)
+  }
+
+  # Insert soft-break opportunities so long contrast names wrap in selectize.
+  wrap_contrast_label <- function(x) {
+    gsub("_", "_\u200B", x, fixed = TRUE)
+  }
+
+  as_wrapped_choice_labels <- function(values) {
+    labels <- vapply(values, wrap_contrast_label, character(1), USE.NAMES = FALSE)
+    stats::setNames(values, labels)
   }
 
   # =========================================================================
@@ -69,11 +137,10 @@ server <- function(input, output, session) {
           rv$data_obj <- load_h5ad_data(DEFAULT_MERGED_H5AD, backed = TRUE)
           rv$h5ad_path <- DEFAULT_MERGED_H5AD
 
-          rv$umap_color_choices <- setdiff(names(rv$data_obj$metadata), "cell_id")
-          label_choices <- vapply(rv$umap_color_choices, sanitize_color_name, character(1))
-          rv$umap_color_label_map <- as.list(label_choices)
-          names(rv$umap_color_label_map) <- rv$umap_color_choices
-          display_choices <- setNames(rv$umap_color_choices, label_choices)
+          rv$umap_state <- build_umap_state(names(rv$data_obj$metadata))
+          rv$umap_color_choices <- rv$umap_state$choices
+          rv$umap_color_label_map <- rv$umap_state$label_map
+          display_choices <- build_umap_choices(names(rv$data_obj$metadata))
 
           updateSelectInput(session, "umap_color_by",
                             choices  = display_choices,
@@ -83,11 +150,20 @@ server <- function(input, output, session) {
         }, error = function(e) message("H5AD load: ", e$message))
       }
 
-      # -- 4. DGE -----------------------------------------------------------
-      if (nzchar(DEFAULT_DGE_DIR) && dir.exists(DEFAULT_DGE_DIR)) {
+      # -- 4. DGE (unified: pseudobulk per-cell-type + global + wilcoxon) ----------
+      has_dge_src <- any(nzchar(c(DEFAULT_DGE_DIR, DEFAULT_PSEUDOBULK_DIR,
+                                  DEFAULT_PSEUDOBULK_GLOBAL_DIR)))
+      if (has_dge_src) {
         tryCatch({
           incProgress(0.15, detail = "Loading DGE results")
-          load_dge_results(DEFAULT_DGE_DIR, show_progress = FALSE)
+          load_dge_results(
+            list(
+              pseudobulk        = DEFAULT_PSEUDOBULK_DIR,
+              pseudobulk_global = DEFAULT_PSEUDOBULK_GLOBAL_DIR,
+              wilcoxon          = DEFAULT_DGE_DIR
+            ),
+            show_progress = FALSE
+          )
         }, error = function(e) message("DGE: ", e$message))
       }
 
@@ -561,12 +637,22 @@ server <- function(input, output, session) {
     )
 
     if (!is.null(umap_data[[input$umap_color_by]])) {
-      if (is.logical(umap_data[[input$umap_color_by]])) {
-        umap_data[[input$umap_color_by]] <- as.character(umap_data[[input$umap_color_by]])
+      color_values_orig <- umap_data[[input$umap_color_by]]
+      is_numeric_color <- is.numeric(color_values_orig)
+
+      # For categorical/coercible columns, cast NA to an explicit "Unknown"
+      # category so low-confidence (pruned) or missing annotations are visible
+      # instead of disappearing.
+      if (!is_numeric_color) {
+        col_vals <- color_values_orig
+        if (is.logical(col_vals)) col_vals <- as.character(col_vals)
+        if (is.factor(col_vals)) col_vals <- as.character(col_vals)
+        if (is.character(col_vals)) {
+          col_vals[is.na(col_vals)] <- "Unknown"
+          umap_data[[input$umap_color_by]] <- factor(col_vals)
+        }
       }
-      if (is.character(umap_data[[input$umap_color_by]])) {
-        umap_data[[input$umap_color_by]] <- as.factor(umap_data[[input$umap_color_by]])
-      }
+
       if (all(is.na(umap_data[[input$umap_color_by]]))) {
         validate(need(FALSE, sprintf("Column '%s' contains only NA values", input$umap_color_by)))
       }
@@ -911,8 +997,13 @@ server <- function(input, output, session) {
     if (!"pvalue" %in% names(df) && "pval" %in% names(df)) {
       df$pvalue <- df$pval
     }
-    if (!"pvalue_adj" %in% names(df) && "pval_adj" %in% names(df)) {
-      df$pvalue_adj <- df$pval_adj
+    if (!"pvalue_adj" %in% names(df)) {
+      # Pseudo-bulk DESeq2 tables use 'padj'; Wilcoxon may use 'pval_adj'.
+      if ("padj" %in% names(df)) {
+        df$pvalue_adj <- df$padj
+      } else if ("pval_adj" %in% names(df)) {
+        df$pvalue_adj <- df$pval_adj
+      }
     }
 
     # Ensure numeric columns are numeric
@@ -925,53 +1016,96 @@ server <- function(input, output, session) {
     df
   }
 
-  load_dge_results <- function(dge_dir, show_progress = TRUE) {
-    if (!dir.exists(dge_dir)) {
-      stop(sprintf("Directory not found: %s", dge_dir))
+  # Unified DGE loader. 'sources' is a named list of directories keyed by group:
+  #   list(pseudobulk        = <results/pseudobulk_dge/pseudobulk_dge>,
+  #        pseudobulk_global = <results/pseudobulk_dge/global>,
+  #        wilcoxon          = <results/dge/dge_results>)
+  # Contrasts are surfaced in a single, optgrouped dropdown grouping pseudo-bulk
+  # (paper-ready) contrasts above the exploratory Wilcoxon contrast.
+  load_dge_results <- function(sources, show_progress = TRUE) {
+
+    group_meta <- list(
+      wilcoxon         = list(label = "Wilcoxon",  prefix = "wilcoxon"),
+      pseudobulk       = list(label = "Pseudobulk", prefix = "pseudobulk"),
+      pseudobulk_global = list(label = "Pseudobulk", prefix = "pseudobulk_global")
+    )
+
+    available <- sources[vapply(sources, function(d) nzchar(d) && dir.exists(d), logical(1))]
+    if (length(available) == 0) {
+      stop("No DGE result directories found")
     }
 
     if (show_progress) {
       incProgress(0.2, detail = "Scanning for contrasts")
     }
 
-    # Find all *_results.csv files (exclude all_contrasts_*)
-    result_files <- list.files(
-      dge_dir,
-      pattern = "^[^all].*_results\\.csv$",
-      full.names = TRUE
-    )
-
-    if (length(result_files) == 0) {
+    total_files <- sum(vapply(available, function(dir) {
+      length(list.files(dir, pattern = "^[^all].*_results\\.csv$", full.names = TRUE))
+    }, integer(1)))
+    if (total_files == 0) {
       stop("No DGE results files found (looking for *_results.csv)")
     }
 
     if (show_progress) {
-      incProgress(0.3, detail = sprintf("Loading %d contrasts", length(result_files)))
+      incProgress(0.3, detail = sprintf("Loading %d contrasts", total_files))
     }
 
-    contrast_names <- gsub("_results\\.csv$", "", basename(result_files))
-
     dge_data <- list()
-    for (i in seq_along(result_files)) {
-      contrast_name <- contrast_names[i]
-      df <- read.csv(result_files[i], stringsAsFactors = FALSE)
-      dge_data[[contrast_name]] <- normalize_dge_df(df)
+    groups <- list()
 
-      if (show_progress) {
-        incProgress(0.4 / length(result_files))
+    for (src_name in names(available)) {
+      src_dir <- available[[src_name]]
+      result_files <- list.files(src_dir, pattern = "^[^all].*_results\\.csv$", full.names = TRUE)
+      contrast_keys <- character(0)
+
+      for (i in seq_along(result_files)) {
+        base <- gsub("_results\\.csv$", "", basename(result_files[i]))
+
+        key <- if (src_name == "pseudobulk_global") {
+          # Single global contrast -> canonical name; multiple conditions disambiguate.
+          if (length(result_files) == 1) "pseudobulk_global" else paste0("pseudobulk_global_", base)
+        } else if (src_name == "wilcoxon" && length(result_files) == 1) {
+          # Single Wilcoxon contrast -> canonical 'wilcoxon_global' name.
+          "wilcoxon_global"
+        } else {
+          paste0(group_meta[[src_name]]$prefix, "_", base)
+        }
+
+        if (key %in% names(dge_data)) key <- paste0(key, "_", i)
+
+        dge_data[[key]] <- normalize_dge_df(read.csv(result_files[i], stringsAsFactors = FALSE))
+        contrast_keys <- c(contrast_keys, key)
+        if (show_progress) {
+          incProgress(0.4 / total_files)
+        }
+      }
+
+      if (length(contrast_keys) > 0) {
+        groups[[group_meta[[src_name]]$label]] <- c(
+          groups[[group_meta[[src_name]]$label]], contrast_keys
+        )
       }
     }
 
-    rv_dge$dge_dir <- dge_dir
-    rv_dge$contrasts <- contrast_names
+    rv_dge$dge_dir <- unname(unlist(available))
+    rv_dge$contrasts <- names(dge_data)
     rv_dge$dge_results <- dge_data
     rv_dge$dge_loaded <- TRUE
+
+    # Build optgrouped choices: group label -> named vector (name = label, value = key)
+    upd_choices <- list()
+    for (grp_label in names(groups)) {
+      keys <- intersect(groups[[grp_label]], rv_dge$contrasts)
+      if (length(keys) > 0) {
+        upd_choices[[grp_label]] <- as_wrapped_choice_labels(keys)
+      }
+    }
 
     updateSelectInput(
       session,
       "dge_contrast_select",
-      choices = contrast_names,
-      selected = contrast_names[1]
+      choices  = upd_choices,
+      selected = rv_dge$contrasts[1]
     )
 
     if (show_progress) {
@@ -1534,10 +1668,26 @@ server <- function(input, output, session) {
     # Register gsea dir as static resource so pathview PNGs can be served
     addResourcePath("gsea_results", gsea_dir)
 
+    # Group the contrast dropdown into per-cell-type vs global pseudo-bulk
+    # contrasts (global dirs are named '*_all_gsea').
+    global_match <- grepl("_all$", contrast_names)
+    per_type_keys <- contrast_names[!global_match]
+    global_keys   <- contrast_names[global_match]
+    gsea_choices <- list()
+    if (length(per_type_keys) > 0) {
+      gsea_choices[["Pseudobulk: per cell-type"]] <- as_wrapped_choice_labels(per_type_keys)
+    }
+    if (length(global_keys) > 0) {
+      gsea_choices[["Pseudobulk: global"]] <- as_wrapped_choice_labels(global_keys)
+    }
+    if (length(gsea_choices) == 0) {
+      gsea_choices <- as_wrapped_choice_labels(contrast_names)
+    }
+
     updateSelectInput(
       session,
       "gsea_contrast_select",
-      choices = contrast_names,
+      choices = gsea_choices,
       selected = contrast_names[1]
     )
 
@@ -2028,15 +2178,24 @@ server <- function(input, output, session) {
             )
             
             # Update color choices
-            rv$umap_color_choices <- setdiff(
-              names(rv$data_obj$metadata),
-              c("cell_id")
-            )
-            
+            rv$umap_state <- build_umap_state(names(rv$data_obj$metadata))
+            rv$umap_color_choices <- rv$umap_state$choices
+            rv$umap_color_label_map <- rv$umap_state$label_map
+            display_choices <- build_umap_choices(names(rv$data_obj$metadata))
+
+            # Keep the freshly saved custom annotation colorable on the UMAP even
+            # though it is not part of the curated whitelist.
+            if (!is.null(rv_annotation$annotation_name)) {
+              display_choices[["Custom annotation"]] <- stats::setNames(
+                rv_annotation$annotation_name, rv_annotation$annotation_name
+              )
+              rv$umap_color_choices <- c(rv$umap_color_choices, rv_annotation$annotation_name)
+            }
+
             updateSelectInput(
               session,
               "umap_color_by",
-              choices = rv$umap_color_choices,
+              choices = display_choices,
               selected = if(rv_annotation$annotation_name %in% rv$umap_color_choices) {
                 rv_annotation$annotation_name
               } else if("batch" %in% rv$umap_color_choices) {
